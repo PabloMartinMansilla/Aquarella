@@ -1,0 +1,46 @@
+<section class="creator-section" aria-labelledby="creator-title">
+    <div class="credits-column">
+        <div>
+            <p class="eyebrow scroll-reveal">DETRÁS DE AQUARELLA</p>
+        <h2 class="scroll-reveal" id="creator-title">Diseñado para acompañarte</h2>
+        </div>
+        <div class="credits-window scroll-reveal" tabindex="0" aria-label="Créditos del creador. La animación se pausa al enfocar esta zona.">
+            <div class="credits-roll">
+                @foreach (var line in CreditLines)
+                {
+                    <p>@line</p>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="creator-links">
+        <div>
+            <p class="eyebrow scroll-reveal">CONECTÁ CON EL CREADOR</p>
+        <h2 class="scroll-reveal">Pablo Mansilla</h2>
+        <p class="links-description scroll-reveal">Desarrollo y diseño de Aquarella</p>
+        </div>
+        <div class="social-links scroll-reveal">
+            @foreach (var link in CreatorLinks)
+            {
+                @if (string.IsNullOrWhiteSpace(link.Url))
+                {
+                    <span class="social-link pending" aria-disabled="true">@link.Name<span>Próximamente</span></span>
+                }
+                else
+                {
+                    <a class="social-link" href="@link.Url" target="_blank" rel="noopener noreferrer">@link.Name<span aria-hidden="true">↗</span></a>
+                }
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    // Agregar líneas aquí para ampliar los créditos.
+    private static readonly string[] CreditLines = ["Aquarella", "Creado por Pablo Mansilla", "Desarrollo y diseño"];
+    // Completar las URLs cuando estén disponibles.
+    private static readonly (string Name, string? Url)[] CreatorLinks =
+        [("LinkedIn", null), ("GitHub", null), ("Portfolio", null)];
+}
+
+

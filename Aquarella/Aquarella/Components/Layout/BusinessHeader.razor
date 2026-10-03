@@ -1,0 +1,79 @@
+@rendermode InteractiveServer
+
+<header class="business-header">
+    <div class="business-title">
+        <button class="menu-button scroll-reveal" type="button" aria-label="Abrir menú de Aquarella"
+                aria-expanded="@menuOpen" aria-controls="business-menu" @onclick="OpenMenu" @ref="menuButton">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16" /></svg>
+        </button>
+        <a class="business-name scroll-reveal" href="/" aria-label="Aquarella, inicio">Aquarella</a>
+        <a class="brand-mark scroll-reveal" href="/perfil" aria-label="Ir a Perfil">A</a>
+    </div>
+    <div class="navigation-bar">
+        <div class="search-container">
+            <label class="sr-only" for="global-search">Buscar módulos</label>
+            <div class="search-field scroll-reveal">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
+                <input id="global-search" type="search" placeholder="¿Qué estás buscando?"
+                       autocomplete="off" @bind="query" @bind:event="oninput" />
+                <span class="search-hint">Buscar módulos</span>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(query))
+            {
+                <div class="search-results" aria-live="polite">
+                    @if (Matches.Count == 0)
+                    {
+                        <p>No encontramos módulos con ese nombre.</p>
+                    }
+                    @foreach (var module in Matches)
+                    {
+                        <a href="@module.Route" @onclick="ClearSearch">@module.Title <span aria-hidden="true">↗</span></a>
+                    }
+                </div>
+            }
+        </div>
+        </div>
+</header>
+
+<div class="drawer-layer @(menuOpen ? "is-open" : "")" inert="@(!menuOpen)">
+    <button class="drawer-backdrop" type="button" tabindex="-1" aria-label="Cerrar menú" @onclick="CloseMenu"></button>
+    <aside id="business-menu" class="menu-panel" role="dialog" aria-modal="true" aria-label="Menú de Aquarella" @onkeydown="HandleMenuKey">
+        <div class="drawer-heading">
+            <strong>Aquarella</strong>
+            <button class="menu-button" type="button" aria-label="Cerrar menú" @onclick="CloseMenu" @ref="closeButton">✕</button>
+        </div>
+        <nav aria-label="Navegación principal">
+            <a href="/" @onclick="CloseMenu">Inicio</a>
+            @foreach (var module in ModuleCatalog.All)
+            {
+                <a href="@module.Route" @onclick="CloseMenu">@module.Title</a>
+            }
+            <a href="/conversaciones/chat" @onclick="CloseMenu">Chat de Aquarella</a>
+            <a href="/configuracion-pagina" @onclick="CloseMenu" @ref="lastMenuLink">Configuración de página</a>
+        </nav>
+    </aside>
+</div>
+
+@code {
+    private bool menuOpen;
+    private bool focusMenu;
+    private string query = string.Empty;
+    private ElementReference menuButton, closeButton, lastMenuLink;
+    private List<ModuleCatalog.Module> Matches => ModuleCatalog.All.Where(module =>
+        System.Globalization.CultureInfo.GetCultureInfo("es").CompareInfo.IndexOf(
+            module.Title, query.Trim(), System.Globalization.CompareOptions.IgnoreCase |
+            System.Globalization.CompareOptions.IgnoreNonSpace) >= 0).ToList();
+    private void OpenMenu() { menuOpen = true; focusMenu = true; }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (focusMenu) { focusMenu = false; await closeButton.FocusAsync(); }
+    }
+    private async Task CloseMenu() { menuOpen = false; await menuButton.FocusAsync(); }
+    private async Task HandleMenuKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape") await CloseMenu();
+    }
+    private void ClearSearch() => query = string.Empty;
+}
+
+

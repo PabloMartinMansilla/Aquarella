@@ -36,3 +36,33 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+html { background: #f7f9f6; }
+body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: #203e32; }
+.module-page { padding: 42px 0; }
+.module-page h1 { margin: 0; font-size: clamp(24px, 3vw, 32px); font-weight: 600; letter-spacing: -0.7px; }
+
+
+
+/* Animation controls: duration, distance and easing can be adjusted here. */
+:root {
+    --reveal-duration: 400ms;
+    --reveal-distance: 28px;
+    --reveal-easing: cubic-bezier(0.4, 0, 0.2, 1);
+}
+.scroll-reveal.scroll-reveal[data-reveal-state] {
+    transition: translate var(--reveal-duration) var(--reveal-easing),
+                opacity var(--reveal-duration) var(--reveal-easing);
+}
+.scroll-reveal[data-reveal-state="pending"] {
+    opacity: 0.9;
+    translate: 0 calc(var(--reveal-direction, 1) * var(--reveal-distance));
+}
+.scroll-reveal[data-reveal-state="visible"] { opacity: 1; translate: 0 0; }
+.scroll-reveal[data-reveal-state="hidden"] {
+    opacity: 0;
+    translate: 0 calc(var(--reveal-direction, 1) * var(--reveal-distance));
+}
+.scroll-reveal[data-reveal-state]:focus-within { opacity: 1; translate: none; }
+@media (prefers-reduced-motion: reduce) {
+    .scroll-reveal.scroll-reveal[data-reveal-state] { opacity: 1; translate: none; transition: none; }
+}

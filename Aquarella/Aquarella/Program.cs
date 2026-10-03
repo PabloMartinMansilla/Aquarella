@@ -1,6 +1,17 @@
 using Aquarella.Components;
+using Aquarella.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<OpenAIOptions>(builder.Configuration.GetSection("OpenAI"));
+builder.Services.PostConfigure<OpenAIOptions>(options =>
+{
+    if (string.IsNullOrWhiteSpace(options.ApiKey))
+    {
+        options.ApiKey = builder.Configuration["OPENAI_API_KEY"];
+    }
+});
+builder.Services.AddHttpClient<AquarellaChatService>(client => client.Timeout = TimeSpan.FromSeconds(30));
 
 // Add services to the container.
 builder.Services.AddRazorComponents()

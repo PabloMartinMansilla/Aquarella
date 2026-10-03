@@ -1,0 +1,71 @@
+@page "/conversaciones/chat"
+@rendermode InteractiveServer
+@inject Aquarella.Services.AquarellaChatService ChatService
+
+<PageTitle>Aquarella</PageTitle>
+
+<main class="chat">
+    <header class="chat-header">
+        <div class="avatar" aria-hidden="true">A</div>
+        <div>
+            <h1>Aquarella</h1>
+            <p>@(ChatService.UsesOpenAI ? "Chat con Aquarella" : "Chat de prueba · Respuestas simuladas")</p>
+        </div>
+    </header>
+
+    <section class="messages" role="log" aria-label="Mensajes del chat" aria-live="polite">
+        @if (messages.Count == 0)
+        {
+            <div class="empty-state">
+                <strong>Tu conversación con Aquarella</strong>
+                <p>Escribí un mensaje para comenzar.</p>
+            </div>
+        }
+        @foreach (var message in messages)
+        {
+            <article class="message @(message.IsUser ? "user-message" : "aquarella-message")">
+                <strong>@(message.IsUser ? "Vos" : "Aquarella")</strong>
+                <p>@message.Text</p>
+            </article>
+        }
+    </section>
+
+    <form class="composer" @onsubmit="SendMessage" @onsubmit:preventDefault>
+        <label for="message-input">Tu mensaje</label>
+        <div class="composer-controls">
+            <input id="message-input" type="text" placeholder="Escribí aquí…"
+                   @bind="draft" @bind:event="oninput" autocomplete="off" disabled="@isSending" />
+            <button type="submit" disabled="@(isSending || string.IsNullOrWhiteSpace(draft))">@(isSending ? "Enviando…" : "Enviar")</button>
+        </div>
+    </form>
+</main>
+
+@code {
+    private string draft = string.Empty;
+    private bool isSending;
+    private readonly List<ChatMessage> messages = [];
+
+    private async Task SendMessage()
+    {
+        if (isSending || string.IsNullOrWhiteSpace(draft))
+        {
+            return;
+        }
+
+        var message = draft.Trim();
+        messages.Add(new ChatMessage(message, true));
+        draft = string.Empty;
+        isSending = true;
+        try
+        {
+            messages.Add(new ChatMessage(await ChatService.ReplyAsync(message), false));
+        }
+        finally
+        {
+            isSending = false;
+        }
+    }
+
+    private sealed record ChatMessage(string Text, bool IsUser);
+}
+

@@ -18,3 +18,7 @@
         right: 0.75rem;
         top: 0.5rem;
     }
+
+.app-shell { margin: 0 auto; padding: 0 24px; }
+@media (max-width: 600px) { .app-shell { padding: 0 16px; } }
+
