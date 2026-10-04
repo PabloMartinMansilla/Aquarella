@@ -16,3 +16,6 @@
 .back-to-dashboard:hover { background: var(--accent-surface, #edf5ef); border-color: var(--border, #b8cebf); }
 .back-to-dashboard:focus-visible { outline: 3px solid var(--secondary, #28745b); outline-offset: 3px; }
 
+
+.back-to-dashboard.prominent { min-height: 48px; box-sizing: border-box; padding: 14px 22px; gap: 12px; font-size: 16px; }
+.back-to-dashboard.prominent span { font-size: 22px; line-height: 1; }

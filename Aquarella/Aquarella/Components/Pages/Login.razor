@@ -1,0 +1,42 @@
+@page "/login"
+@rendermode InteractiveServer
+@inject Aquarella.Services.LocalSessionStore Session
+@inject NavigationManager Navigation
+
+<PageTitle>Iniciar sesión · Aquarella</PageTitle>
+<main class="module-page login-page">
+    @if (Session.IsSignedIn) { <BackToDashboard Prominent="true" /> }
+    <section class="login-card">
+        <h1>Iniciar sesión</h1>
+        @if (!Session.Available) { <p>El inicio de sesión provisional está disponible sólo en desarrollo local.</p> }
+        else {
+            <form @onsubmit="SignIn" @onsubmit:preventDefault novalidate>
+                <label for="login-user">Usuario</label><input id="login-user" autocomplete="username" @bind="username" @bind:event="oninput" />
+                <label for="login-password">Contraseña</label><input id="login-password" type="password" autocomplete="current-password" @bind="password" @bind:event="oninput" />
+                <p class="login-status" role="status" aria-live="polite">@message</p>
+                <button disabled="@(!ready || busy)" type="submit">Iniciar sesión</button>
+            </form>
+        }
+    </section>
+</main>
+@code {
+    private string username = "", password = "";
+    private string? message;
+    private bool ready, busy;
+    protected override async Task OnAfterRenderAsync(bool firstRender) {
+        if (!firstRender) return;
+        try { await Session.InitializeAsync(); ready = true; }
+        catch (JSException) { message = "No se pudo acceder al almacenamiento de sesión del navegador."; }
+        StateHasChanged();
+    }
+    private async Task SignIn() {
+        if (!ready || busy) return;
+        busy = true;
+        try {
+            if (await Session.SignInAsync(username, password)) { password = ""; Navigation.NavigateTo("/"); }
+            else { password = ""; message = "Usuario o contraseña incorrectos."; }
+        } catch (JSException) { password = ""; message = "No se pudo guardar la sesión. Revisá los permisos del navegador."; }
+        finally { busy = false; }
+    }
+}
+

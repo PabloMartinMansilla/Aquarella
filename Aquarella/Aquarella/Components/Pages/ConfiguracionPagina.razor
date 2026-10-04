@@ -1,3 +1,5 @@
+@inject Aquarella.Services.LocalSessionStore Session
+@inject NavigationManager Navigation
 @page "/configuracion-pagina"
 
 <PageTitle>Configuración de página · Aquarella</PageTitle>
@@ -5,4 +7,10 @@
 <main class="module-page">
     <BackToDashboard />
     <h1>Configuración de página</h1>
+    <button class="tutorial-button" @onclick="Replay">Ver tutorial nuevamente</button>
 </main>
+
+@code {
+    private void Replay() { Session.RequestTutorial(); Navigation.NavigateTo("/"); }
+}
+

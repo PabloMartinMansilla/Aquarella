@@ -1,0 +1,19 @@
+@inject IJSRuntime JS
+@inject Aquarella.Services.LocalSessionStore Session
+@implements IAsyncDisposable
+
+@code {
+    private IJSObjectReference? module;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !Session.IsSignedIn) return;
+        try {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./onboarding.js");
+            await module.InvokeVoidAsync("start", Session.UserId, Session.ConsumeTutorialRequest());
+        } catch (JSException) { /* Storage unavailable: never block the dashboard. */ }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (module is not null) { try { await module.InvokeVoidAsync("stop"); await module.DisposeAsync(); } catch (JSDisconnectedException) { } }
+    }
+}

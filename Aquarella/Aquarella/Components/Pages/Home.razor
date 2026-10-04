@@ -10,10 +10,10 @@
         </div>
         <p class="scroll-reveal">Todo lo que necesitás, en un solo lugar.</p>
     </div>
-    <section class="module-grid" aria-label="Paneles principales">
+    <section id="tour-panels" class="module-grid" aria-label="Paneles principales">
         @foreach (var module in ModuleCatalog.All)
         {
-            <a class="module-card scroll-reveal @module.Accent" href="@module.Route">
+            <a id="tour-card-@module.Accent" class="module-card scroll-reveal @module.Accent" href="@module.Route">
                 <div class="card-top">
                     <span class="module-icon" aria-hidden="true">
                         <svg viewBox="0 0 24 24"><path d="@module.IconPath" /></svg>
@@ -29,4 +29,7 @@
 </main>
 
 
+
+
+<OnboardingTour />
 

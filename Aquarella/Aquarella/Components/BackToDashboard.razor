@@ -1,4 +1,9 @@
-<a class="back-to-dashboard" href="/">
+<a class="back-to-dashboard @(Prominent ? "prominent" : "")" href="/">
     <span aria-hidden="true">←</span>
     Volver al dashboard
 </a>
+
+@code {
+    [Parameter] public bool Prominent { get; set; }
+}
+

@@ -1,0 +1,2 @@
+.tutorial-button { margin-top: 24px; padding: 14px 22px; border: 0; border-radius: 12px; background: var(--secondary); color: var(--on-secondary); font: inherit; font-weight: 600; cursor: pointer; }
+.tutorial-button:focus-visible { outline: 2px solid var(--secondary); outline-offset: 3px; }

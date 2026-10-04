@@ -1,0 +1,10 @@
+.tour-layer { position: fixed; inset: 0; z-index: 1000; overflow: hidden; }
+.tour-spotlight { position: absolute; pointer-events: none; border: 2px solid var(--secondary); box-sizing: border-box; box-shadow: 0 0 0 9999px #0009, 0 0 14px #fff5; transition: left .28s ease-out, top .28s ease-out, width .28s ease-out, height .28s ease-out; }
+.tour-card { position: absolute; box-sizing: border-box; width: min(340px, calc(100vw - 24px)); padding: 22px; border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 12px 36px #0003; background: var(--surface); color: var(--surface-text); overflow-y: auto; }
+.tour-card h2 { font-size: 19px; margin: 10px 0; color: var(--heading); }
+.tour-card p { font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
+.tour-card small { color: var(--surface-muted); }
+.tour-card button { cursor: pointer; padding: 10px 12px; margin: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--surface-text); font: inherit; font-size: 13px; }
+.tour-card .tour-primary { background: var(--secondary); color: var(--on-secondary); border: 0; }
+.tour-card button:focus-visible { outline: 2px solid var(--secondary); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .tour-spotlight { transition: none; } }

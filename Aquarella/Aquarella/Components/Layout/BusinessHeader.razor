@@ -1,15 +1,16 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @inject Aquarella.Services.BusinessProfileStore ProfileStore
+@inject Aquarella.Services.LocalSessionStore Session
 
 <header class="business-header">
     <div class="business-title">
-        <button class="menu-button scroll-reveal" type="button" aria-label="@($"Abrir menú de {identity.Name}")"
+        <button id="tour-menu" class="menu-button scroll-reveal" type="button" aria-label="@($"Abrir menú de {identity.Name}")"
                 aria-expanded="@menuOpen" aria-controls="business-menu" @onclick="OpenMenu" @ref="menuButton">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16" /></svg>
         </button>
         <a class="business-name scroll-reveal" href="/" aria-label="@($"{identity.Name}, inicio")">@identity.Name</a>
-        <a class="brand-mark scroll-reveal" href="/perfil" aria-label="Ir a Perfil">
+        <a id="tour-profile" class="brand-mark scroll-reveal" href="/perfil" aria-label="Ir a Perfil">
             @if (identity.LogoDataUrl is not null)
             {
                 <img src="@identity.LogoDataUrl" alt="@($"Logo de {identity.Name}")" />
@@ -23,7 +24,7 @@
     <div class="navigation-bar">
         <div class="search-container">
             <label class="sr-only" for="global-search">Buscar módulos</label>
-            <div class="search-field scroll-reveal">
+            <div id="tour-search" class="search-field scroll-reveal">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg>
                 <input id="global-search" type="search" placeholder="¿Qué estás buscando?"
                        autocomplete="off" @bind="query" @bind:event="oninput" />
@@ -44,6 +45,7 @@
             }
         </div>
         </div>
+    @if (Session.Notice is not null) { <p class="session-notice" role="status">@Session.Notice</p> }
 </header>
 
 <div class="drawer-layer @(menuOpen ? "is-open" : "")" inert="@(!menuOpen)">
@@ -61,6 +63,10 @@
             }
             <a href="/conversaciones/chat" @onclick="CloseMenu">Chat de Aquarella</a>
             <a href="/configuracion-pagina" @onclick="CloseMenu" @ref="lastMenuLink">Configuración de página</a>
+            @if (Session.IsSignedIn) {
+                <span class="session-user">pablo</span><button class="session-link" @onclick="SignOut">Cerrar sesión</button>
+            } else { <a href="/login" @onclick="CloseMenu">Iniciar sesión</a> }
+            <p class="session-notice" role="status">@sessionError</p>
         </nav>
     </aside>
 </div>
@@ -71,9 +77,15 @@
     {
         identity = ProfileStore.Load();
         ProfileStore.Changed += IdentityChanged;
+        Session.Changed += IdentityChanged;
     }
     private void IdentityChanged() => _ = InvokeAsync(() => { identity = ProfileStore.Load(); StateHasChanged(); });
-    public void Dispose() => ProfileStore.Changed -= IdentityChanged;
+    public void Dispose() { ProfileStore.Changed -= IdentityChanged; Session.Changed -= IdentityChanged; }
+    private string? sessionError;
+    private async Task SignOut() {
+        try { await Session.SignOutAsync(); sessionError = null; await CloseMenu(); }
+        catch (JSException) { sessionError = "No se pudo cerrar la sesión. Revisá los permisos del navegador."; }
+    }
     private bool menuOpen;
     private bool focusMenu;
     private string query = string.Empty;
@@ -87,6 +99,7 @@
     {
         if (firstRender)
         {
+            try { await Session.InitializeAsync(); } catch (JSException) { }
             try { await ProfileStore.InitializeAsync(); }
             catch (Microsoft.JSInterop.JSException) { /* Keep the default identity if browser storage is unavailable. */ }
         }
@@ -99,5 +112,8 @@
     }
     private void ClearSearch() => query = string.Empty;
 }
+
+
+
 
 
