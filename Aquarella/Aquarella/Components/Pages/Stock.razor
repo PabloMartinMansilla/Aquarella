@@ -1,9 +1,117 @@
 @page "/stock"
+@rendermode InteractiveServer
+@using Aquarella.Models
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
 <PageTitle>Stock · Aquarella</PageTitle>
-
-<main class="module-page">
+<main class="module-page stock-page">
     <BackToDashboard />
-    <h1>Stock</h1>
+    <div class="stock-heading"><h1>Stock</h1><button class="primary-button" disabled="@(!ready || busy)" @onclick="NewProduct">+ Agregar producto</button></div>
+    @if (editing)
+    {
+        <form class="product-form" @onsubmit="SaveProduct" @onsubmit:preventDefault>
+            <h2>@(editId is null ? "Agregar producto" : "Editar producto")</h2>
+            <div class="form-fields">
+                <label>Nombre del producto<input @bind="name" @bind:event="oninput" maxlength="120" required /></label>
+                <label>@(editId is null ? "Cantidad inicial" : "Cantidad actual")<input type="number" min="0" max="2147483647" @bind="quantity" @bind:event="oninput" required /></label>
+            </div>
+            <div class="form-actions"><button class="primary-button" disabled="@busy" type="submit">Guardar producto</button><button class="quiet-button" disabled="@busy" type="button" @onclick="() => editing = false">Cancelar</button></div>
+        </form>
+    }
+    <p class="status" role="status" aria-live="polite">@status</p>
+    <section class="product-list" aria-label="Productos">
+        @if (!ready) { <p class="empty-state">@(loadFailed ? "No se pudo cargar el stock. Recargá la página para volver a intentar." : "Cargando productos…")</p> }
+        else if (products.Count == 0) { <p class="empty-state">Todavía no hay productos. Agregá el primero para comenzar.</p> }
+        @foreach (var product in products)
+        {
+            <article class="product-row" @key="product.Id">
+                <div class="product-info"><h2>@product.Name</h2><p>Cantidad actual: <strong>@product.Quantity</strong></p></div>
+                <div class="adjustment">
+                    <label for="adjust-@product.Id">Ajuste de cantidad</label>
+                    <div class="adjustment-controls">
+                        <button class="step-button" disabled="@busy" aria-label="Restar a @product.Name" @onclick="() => Step(product.Id, -1)">−</button>
+                        <input id="adjust-@product.Id" type="number" @bind="adjustments[product.Id]" @bind:event="oninput" aria-label="Ajuste de cantidad de @product.Name" />
+                        <button class="step-button" disabled="@busy" aria-label="Sumar a @product.Name" @onclick="() => Step(product.Id, 1)">+</button>
+                        <button class="primary-button" disabled="@busy" @onclick="() => Confirm(product)">Confirmar</button>
+                    </div>
+                </div>
+                <div class="row-actions">
+                    <button class="quiet-button" disabled="@busy" aria-label="Editar @product.Name" @onclick="() => Edit(product)">Editar</button>
+                    <button class="quiet-button" disabled="@busy" aria-label="Eliminar @product.Name" @onclick="() => deleteId = product.Id">Eliminar</button>
+                </div>
+                @if (deleteId == product.Id)
+                {
+                    <div class="delete-confirm">¿Eliminar @product.Name? <button class="quiet-button" disabled="@busy" @onclick="() => Delete(product.Id)">Sí, eliminar</button><button class="quiet-button" disabled="@busy" @onclick="() => deleteId = null">Cancelar</button></div>
+                }
+            </article>
+        }
+    </section>
+    <p class="storage-note">Los productos se guardan en este navegador y se conservan al recargar. Usá ajustes positivos para sumar y negativos para restar.</p>
 </main>
+
+@code {
+    private List<StockProduct> products = [];
+    private readonly Dictionary<Guid, int> adjustments = [];
+    private IJSObjectReference? storage;
+    private bool ready, busy, editing, loadFailed;
+    private Guid? editId, deleteId;
+    private string name = "";
+    private int quantity;
+    private string? status;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            storage = await JS.InvokeAsync<IJSObjectReference>("import", "./stock-storage.js");
+            products = await storage.InvokeAsync<List<StockProduct>>("load");
+            foreach (var product in products) adjustments[product.Id] = 0;
+            ready = true;
+        }
+        catch (JSException) { loadFailed = true; status = "No se pudo acceder a los productos guardados. No se sobrescribieron los datos."; }
+        StateHasChanged();
+    }
+    private void NewProduct() { editId = null; name = ""; quantity = 0; editing = true; status = null; }
+    private void Edit(StockProduct product) { editId = product.Id; name = product.Name; quantity = product.Quantity; editing = true; status = null; }
+    private void Step(Guid id, int step)
+    {
+        var value = (long)adjustments[id] + step;
+        if (value >= int.MinValue && value <= int.MaxValue) adjustments[id] = (int)value;
+    }
+    private async Task SaveProduct()
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120 || quantity < 0) { status = "Ingresá un nombre y una cantidad válida, sin valores negativos."; return; }
+        var product = new StockProduct(editId ?? Guid.NewGuid(), name.Trim(), quantity);
+        var next = products.ToList();
+        if (editId is null) next.Add(product);
+        else next[next.FindIndex(p => p.Id == editId)] = product;
+        if (await Persist(next)) { adjustments[product.Id] = 0; editing = false; status = "Producto guardado."; }
+    }
+    private async Task Confirm(StockProduct product)
+    {
+        var result = (long)product.Quantity + adjustments[product.Id];
+        if (result < 0 || result > int.MaxValue) { status = "La cantidad final debe estar entre 0 y 2.147.483.647."; return; }
+        if (await Persist(products.Select(p => p.Id == product.Id ? p with { Quantity = (int)result } : p).ToList()))
+        { adjustments[product.Id] = 0; if (editId == product.Id) editing = false; status = "Cantidad actualizada."; }
+    }
+    private async Task Delete(Guid id)
+    {
+        if (await Persist(products.Where(p => p.Id != id).ToList()))
+        { adjustments.Remove(id); deleteId = null; if (editId == id) editing = false; status = "Producto eliminado."; }
+    }
+    private async Task<bool> Persist(List<StockProduct> next)
+    {
+        if (busy || !ready || storage is null) return false;
+        busy = true;
+        try { await storage.InvokeVoidAsync("save", next); products = next; return true; }
+        catch (JSException) { status = "No se pudo guardar. Revisá el espacio o los permisos del navegador; los datos anteriores se conservaron."; return false; }
+        finally { busy = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (storage is not null) { try { await storage.DisposeAsync(); } catch (JSDisconnectedException) { } }
+    }
+}
 

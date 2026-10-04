@@ -12,6 +12,9 @@ builder.Services.PostConfigure<OpenAIOptions>(options =>
     }
 });
 builder.Services.AddHttpClient<AquarellaChatService>(client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddScoped<BusinessProfileStore>();
+builder.Services.AddScoped<AgendaStore>();
+builder.Services.AddScoped<IBusinessProfilePersistence, BrowserBusinessProfilePersistence>();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -36,3 +39,4 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.Run();
+

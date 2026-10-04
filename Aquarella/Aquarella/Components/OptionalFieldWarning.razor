@@ -1,0 +1,9 @@
+@if (string.IsNullOrWhiteSpace(Value))
+{
+    <span class="optional-warning"><span aria-hidden="true">⚠</span> @Label sin completar</span>
+}
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public string Label { get; set; } = "Dato opcional";
+}

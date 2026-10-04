@@ -4,14 +4,15 @@
     gap: 10px;
     margin-bottom: 24px;
     padding: 10px 16px;
-    border: 1px solid #dde6e0;
+    border: 1px solid var(--border, #dde6e0);
     border-radius: 12px;
-    background: white;
-    color: #28745b;
+    background: var(--surface, white);
+    color: var(--secondary, #28745b);
     text-decoration: none;
     font-size: 14px;
     font-weight: 600;
 }
 
-.back-to-dashboard:hover { background: #edf5ef; border-color: #b8cebf; }
-.back-to-dashboard:focus-visible { outline: 3px solid #28745b; outline-offset: 3px; }
+.back-to-dashboard:hover { background: var(--accent-surface, #edf5ef); border-color: var(--border, #b8cebf); }
+.back-to-dashboard:focus-visible { outline: 3px solid var(--secondary, #28745b); outline-offset: 3px; }
+

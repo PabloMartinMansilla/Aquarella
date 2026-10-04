@@ -10,8 +10,11 @@ public static class ModuleCatalog
         new("Configuración de IA", "/configuracion-ia", "Tu asistente, a tu manera", "ai", "M12 3v3 M9 3h6 M5 7h14v13H5z M2 11h3 M19 11h3 M8 12h1 M15 12h1 M9 16h6"),
         new("Métricas", "/metricas", "Una mirada a tus resultados", "metrics", "M4 3v18h17 M8 16v-5 M13 16V7 M18 16V4"),
         new("Agenda / Reservas", "/agenda", "Organizá tus próximos encuentros", "agenda", "M4 5h16v16H4z M8 2v6 M16 2v6 M4 10h16 M8 14h2 M14 14h2 M8 17h2"),
-        new("Perfil", "/perfil", "Tu espacio personal", "profile", "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 16 0v2")
+        new("Perfil", "/perfil", "Identidad y datos del negocio", "profile", "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0 M4 21v-2a8 8 0 0 1 16 0v2"),
+        new("Precios", "/precios", "Costos, precios y ganancias", "prices", "M3 3h9l9 9-9 9-9-9z M7 7h.01 M10 10l6 6")
     ];
 
     public sealed record Module(string Title, string Route, string Description, string Accent, string IconPath);
 }
+
+

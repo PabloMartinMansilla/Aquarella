@@ -1,0 +1,49 @@
+.agenda-page { max-width: 1100px; margin: 0 auto; }
+.month-navigation { display: flex; align-items: center; gap: 16px; margin: 24px 0; }
+h2 { font-size: 20px; margin: 0; color: var(--heading); }
+.month-navigation h2 { text-transform: capitalize; min-width: 170px; }
+button { font: inherit; cursor: pointer; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--surface-text); }
+button:disabled { opacity: .5; cursor: default; }
+.today-button { margin-left: auto; }
+.calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+.weekday { text-align: center; font-size: 13px; color: var(--muted); padding: 8px 0; }
+.day-card { aspect-ratio: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; padding: 14px; border-radius: 16px; box-shadow: 0 4px 16px #254c3504; }
+.day-card:hover { border-color: var(--secondary); }
+.day-number { font-size: 18px; font-weight: 600; }
+.is-today .day-number { color: var(--accent-text); text-decoration: underline; text-underline-offset: 5px; }
+.is-selected { border: 2px solid var(--secondary); }
+.note-indicator { font-size: 11px; color: var(--accent-text); }
+.status, .storage-note { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.status { min-height: 21px; }
+.notes-panel { padding: 28px; margin-top: 28px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--surface-text); }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+h3 { font-size: 16px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.note { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.note > div:first-child { flex: 1; min-width: 0; }
+.note p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; margin: 0; }
+.note small { font-weight: 400; color: var(--surface-muted); margin-left: 8px; }
+.note-actions { display: flex; gap: 6px; }
+.note-actions button, .delete-confirm button { border: 0; font-size: 12px; padding: 6px 8px; color: var(--surface-muted); }
+.delete-confirm { width: 100%; font-size: 13px; }
+form { margin-top: 24px; }
+.note-fields { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+label { font-size: 13px; }
+input, textarea { box-sizing: border-box; display: block; width: 100%; min-width: 0; margin-top: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--surface-text); font: inherit; }
+textarea { resize: vertical; }
+.content-field { grid-column: 1 / -1; }
+.form-actions { display: flex; gap: 12px; margin-top: 20px; }
+.save-button { background: var(--secondary); color: var(--on-secondary); border: 0; }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--secondary); outline-offset: 3px; }
+@media (max-width: 600px) { .calendar { gap: 5px; } .day-card { padding: 6px; border-radius: 9px; } .day-number { font-size: 14px; } .note-word { display: none; } .note-indicator { font-size: 9px; } .month-navigation { gap: 8px; } .month-navigation h2 { min-width: 0; font-size: 16px; } .month-navigation button { padding: 8px 10px; } .notes-panel { padding: 18px; } .note-fields { grid-template-columns: 1fr; } }
+
+/* Contextual note editor; the calendar remains in its original layout. */
+.notes-panel { position: fixed; z-index: 50; box-sizing: border-box; width: 360px; max-height: calc(100dvh - 24px); margin: 0; padding: 20px; overflow-y: auto; visibility: hidden; box-shadow: 0 10px 32px #17241d25; }
+.notes-panel h2 { font-size: 17px; }
+.notes-panel .panel-heading { margin-bottom: 12px; }
+.notes-panel .note { gap: 8px; padding: 12px 0; }
+.notes-panel .note-fields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.notes-panel form { margin-top: 16px; }
+.notes-panel textarea { min-height: 72px; }
+.note-status { font-size: 12px; line-height: 1.5; color: var(--surface-muted); }
+.note-error { color: #b32121; }
+@media (max-width: 600px) { .notes-panel { padding: 18px; } }

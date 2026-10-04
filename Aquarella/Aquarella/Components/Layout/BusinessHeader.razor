@@ -1,13 +1,24 @@
 @rendermode InteractiveServer
+@implements IDisposable
+@inject Aquarella.Services.BusinessProfileStore ProfileStore
 
 <header class="business-header">
     <div class="business-title">
-        <button class="menu-button scroll-reveal" type="button" aria-label="Abrir menú de Aquarella"
+        <button class="menu-button scroll-reveal" type="button" aria-label="@($"Abrir menú de {identity.Name}")"
                 aria-expanded="@menuOpen" aria-controls="business-menu" @onclick="OpenMenu" @ref="menuButton">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16" /></svg>
         </button>
-        <a class="business-name scroll-reveal" href="/" aria-label="Aquarella, inicio">Aquarella</a>
-        <a class="brand-mark scroll-reveal" href="/perfil" aria-label="Ir a Perfil">A</a>
+        <a class="business-name scroll-reveal" href="/" aria-label="@($"{identity.Name}, inicio")">@identity.Name</a>
+        <a class="brand-mark scroll-reveal" href="/perfil" aria-label="Ir a Perfil">
+            @if (identity.LogoDataUrl is not null)
+            {
+                <img src="@identity.LogoDataUrl" alt="@($"Logo de {identity.Name}")" />
+            }
+            else
+            {
+                @identity.Name.Trim().Substring(0, 1).ToUpperInvariant()
+            }
+        </a>
     </div>
     <div class="navigation-bar">
         <div class="search-container">
@@ -37,9 +48,9 @@
 
 <div class="drawer-layer @(menuOpen ? "is-open" : "")" inert="@(!menuOpen)">
     <button class="drawer-backdrop" type="button" tabindex="-1" aria-label="Cerrar menú" @onclick="CloseMenu"></button>
-    <aside id="business-menu" class="menu-panel" role="dialog" aria-modal="true" aria-label="Menú de Aquarella" @onkeydown="HandleMenuKey">
+    <aside id="business-menu" class="menu-panel" role="dialog" aria-modal="true" aria-label="@($"Menú de {identity.Name}")" @onkeydown="HandleMenuKey">
         <div class="drawer-heading">
-            <strong>Aquarella</strong>
+            <strong>@identity.Name</strong>
             <button class="menu-button" type="button" aria-label="Cerrar menú" @onclick="CloseMenu" @ref="closeButton">✕</button>
         </div>
         <nav aria-label="Navegación principal">
@@ -55,6 +66,14 @@
 </div>
 
 @code {
+    private Aquarella.Models.BusinessProfile identity = new();
+    protected override void OnInitialized()
+    {
+        identity = ProfileStore.Load();
+        ProfileStore.Changed += IdentityChanged;
+    }
+    private void IdentityChanged() => _ = InvokeAsync(() => { identity = ProfileStore.Load(); StateHasChanged(); });
+    public void Dispose() => ProfileStore.Changed -= IdentityChanged;
     private bool menuOpen;
     private bool focusMenu;
     private string query = string.Empty;
@@ -66,6 +85,11 @@
     private void OpenMenu() { menuOpen = true; focusMenu = true; }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (firstRender)
+        {
+            try { await ProfileStore.InitializeAsync(); }
+            catch (Microsoft.JSInterop.JSException) { /* Keep the default identity if browser storage is unavailable. */ }
+        }
         if (focusMenu) { focusMenu = false; await closeButton.FocusAsync(); }
     }
     private async Task CloseMenu() { menuOpen = false; await menuButton.FocusAsync(); }

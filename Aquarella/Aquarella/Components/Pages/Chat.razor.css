@@ -7,11 +7,11 @@
     min-height: 320px;
     margin: 2rem auto;
     overflow: hidden;
-    border: 1px solid #d8dfdb;
+    border: 1px solid var(--border, #d8dfdb);
     border-radius: 14px;
     box-shadow: 0 12px 40px #243b3020;
     font-family: "Segoe UI", system-ui, sans-serif;
-    color: #202c33;
+    color: var(--surface-text, #202c33);
 }
 
 .chat-header {
@@ -19,8 +19,8 @@
     align-items: center;
     gap: 0.9rem;
     padding: 1rem 1.5rem;
-    background: #f0f2f5;
-    border-bottom: 1px solid #d8dfdb;
+    background: var(--surface, #f0f2f5);
+    border-bottom: 1px solid var(--border, #d8dfdb);
 }
 
 .avatar {
@@ -30,14 +30,14 @@
     width: 46px;
     height: 46px;
     border-radius: 50%;
-    background: #008069;
-    color: white;
+    background: var(--secondary, #008069);
+    color: var(--on-secondary, white);
     font-size: 1.4rem;
     font-weight: 600;
 }
 
 h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
-.chat-header p { margin: 0.25rem 0 0; color: #54656f; font-size: 0.85rem; }
+.chat-header p { margin: 0.25rem 0 0; color: var(--surface-muted, #54656f); font-size: 0.85rem; }
 
 .messages {
     flex: 1;
@@ -47,7 +47,7 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
     flex-direction: column;
     gap: 0.8rem;
     padding: 1.5rem 2.5rem;
-    background-color: #efeae2;
+    background-color: var(--primary, #efeae2);
     background-image: radial-gradient(#d6cfc5 0.8px, transparent 0.8px);
     background-size: 22px 22px;
 }
@@ -57,9 +57,9 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
     margin: auto 0;
     padding: 1.25rem 1.5rem;
     border-radius: 10px;
-    background: #ffffffde;
+    background: var(--surface, #ffffffde);
     text-align: center;
-    color: #54656f;
+    color: var(--surface-muted, #54656f);
     box-shadow: 0 1px 3px #00000012;
 }
 
@@ -81,14 +81,14 @@ h1 { margin: 0; font-size: 1.15rem; font-weight: 600; }
     border: 6px solid transparent;
 }
 
-.message strong { font-size: 0.78rem; color: #006b58; }
+.message strong { font-size: 0.78rem; color: var(--accent-text, #006b58); }
 .message p { margin: 0.3rem 0 0; white-space: pre-wrap; line-height: 1.5; }
-.user-message { align-self: flex-end; background: #d9fdd3; border-top-right-radius: 0; }
-.user-message::before { right: -6px; border-top-color: #d9fdd3; }
-.aquarella-message { align-self: flex-start; background: white; border-top-left-radius: 0; }
-.aquarella-message::before { left: -6px; border-top-color: white; }
+.user-message { align-self: flex-end; background: var(--accent-surface, #d9fdd3); border-top-right-radius: 0; }
+.user-message::before { right: -6px; border-top-color: var(--accent-surface, #d9fdd3); }
+.aquarella-message { align-self: flex-start; background: var(--surface, white); border-top-left-radius: 0; }
+.aquarella-message::before { left: -6px; border-top-color: var(--surface, white); }
 
-.composer { padding: 0.9rem 1.5rem; background: #f0f2f5; }
+.composer { padding: 0.9rem 1.5rem; background: var(--surface, #f0f2f5); }
 .composer label {
     position: absolute;
     width: 1px;
@@ -106,26 +106,26 @@ input {
     padding: 0.85rem 1rem;
     border: 1px solid transparent;
     border-radius: 24px;
-    background: white;
-    color: #202c33;
+    background: var(--surface, white);
+    color: var(--surface-text, #202c33);
     font: inherit;
 }
 
-input::placeholder { color: #667781; }
+input::placeholder { color: var(--surface-muted, #667781); }
 button {
     padding: 0.85rem 1.25rem;
     border: 0;
     border-radius: 24px;
-    background: #008069;
-    color: white;
+    background: var(--secondary, #008069);
+    color: var(--on-secondary, white);
     font: inherit;
     font-weight: 600;
     cursor: pointer;
 }
 
-button:hover:not(:disabled) { background: #006b58; }
+button:hover:not(:disabled) { background: var(--accent-text, #006b58); }
 button:disabled { opacity: 0.45; cursor: default; }
-input:focus-visible, button:focus-visible { outline: 3px solid #008069; outline-offset: 2px; }
+input:focus-visible, button:focus-visible { outline: 3px solid var(--secondary, #008069); outline-offset: 2px; }
 
 @media (max-width: 640px) {
     .chat { height: calc(100dvh - 16px); min-height: 280px; margin: 0; border-radius: 0; }
@@ -135,3 +135,5 @@ input:focus-visible, button:focus-visible { outline: 3px solid #008069; outline-
     .composer { padding: 0.75rem; }
     button { padding-inline: 1rem; }
 }
+
+

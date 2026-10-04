@@ -1,0 +1,18 @@
+<div class="color-field">
+    <label for="@Id">@Label</label>
+    <div class="color-controls">
+        <input type="color" value="@PreviewColor" aria-label="Seleccionar color: @Label" @oninput="ChangePicker" />
+        <input id="@Id" type="text" value="@Value" @oninput="ChangeHex" maxlength="7" spellcheck="false" placeholder="#28745B" />
+    </div>
+    <span class="color-preview" style="background-color: @PreviewColor" aria-label="Vista previa: @Label"></span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Id { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+    [Parameter] public string Value { get; set; } = "#28745B";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    private string PreviewColor => System.Text.RegularExpressions.Regex.IsMatch(Value ?? "", "^#[0-9a-fA-F]{6}$") ? Value! : "#28745B";
+    private Task ChangePicker(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString()?.ToUpperInvariant() ?? "#28745B");
+    private Task ChangeHex(ChangeEventArgs args) => ValueChanged.InvokeAsync(args.Value?.ToString()?.Trim().ToUpperInvariant() ?? "");
+}

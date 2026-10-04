@@ -1,0 +1,31 @@
+.business-profile { max-width: 1100px; margin: 0 auto; }
+.intro { color: var(--muted, #73857c); line-height: 1.6; margin: 14px 0 32px; }
+.profile-section { padding: 28px; margin-bottom: 24px; border: 1px solid var(--border, #e3e9e5); border-radius: 19px; background: var(--surface, white); box-shadow: 0 4px 16px #254c3504; }
+h2 { margin: 0 0 24px; font-size: 20px; font-weight: 600; letter-spacing: -0.4px; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.full-width { grid-column: 1 / -1; }
+.field label, .logo-field label { display: block; margin-bottom: 10px; font-size: 14px; font-weight: 600; }
+.field ::deep input, .field ::deep textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid var(--border, #dde6e0); border-radius: 10px; background: var(--surface, #fcfdfb); color: var(--text, #203e32); font: inherit; font-size: 14px; }
+.field ::deep textarea { resize: vertical; }
+.field ::deep input:focus-visible, .field ::deep textarea:focus-visible, button:focus-visible, .logo-field ::deep input:focus-visible { outline: 2px solid var(--secondary, #28745b); outline-offset: 3px; }
+.identity-grid { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; }
+.logo-preview { display: grid; place-items: center; width: 112px; height: 112px; border: 1px solid var(--border, #dde6e0); border-radius: 20px; margin: 14px 0; background: var(--accent-surface, #edf5ef); color: var(--secondary, #28745b); font-size: 44px; font-weight: 600; overflow: hidden; }
+.logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+.logo-field ::deep input { max-width: 100%; font: inherit; font-size: 12px; }
+.color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.hint { color: var(--muted, #73857c); font-size: 13px; line-height: 1.6; }
+.profile-section > .hint { margin: -10px 0 24px; }
+.save-bar { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.save-button { flex-shrink: 0; padding: 14px 24px; border: 0; border-radius: 12px; background: var(--secondary, #28745b); color: var(--on-secondary, white); font: inherit; font-weight: 600; cursor: pointer; }
+.save-button:hover { background: var(--secondary, #205e49); }
+.save-button:disabled { opacity: 0.6; cursor: default; }
+.text-button { border: 0; padding: 0; background: transparent; color: var(--secondary, #28745b); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; }
+.save-status { color: var(--secondary, #28745b); min-height: 24px; }
+.field-error { color: #b32121; font-size: 13px; }
+::deep .validation-message { font-size: 13px; margin-top: 8px; }
+@media (max-width: 700px) { .identity-grid, .field-grid, .color-grid { grid-template-columns: 1fr; } .profile-section { padding: 22px; } .save-bar { align-items: stretch; flex-direction: column; gap: 12px; } }
+
+
+h2 { color: var(--heading); }
+.profile-section { color: var(--surface-text); }
+.profile-section .hint { color: var(--surface-muted); }

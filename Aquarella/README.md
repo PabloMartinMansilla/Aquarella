@@ -33,3 +33,15 @@ El buscador compartido encuentra módulos por nombre; no busca datos del negocio
 Las dos tarjetas vacías están reservadas y no tienen acciones.
 El chat existente se conserva en `/conversaciones/chat`, accesible desde el menú.
 La integración de OpenAI y su configuración de seguridad se mantienen sin cambios.
+
+## Identidad del negocio
+
+BusinessProfileStore centraliza todos los datos y publica cambios al guardar.
+IBusinessProfilePersistence separa el almacenamiento de los componentes.
+BrowserBusinessProfilePersistence guarda provisionalmente en localStorage,
+con la clave aquarella.business-profile.v1, por navegador y origen. No es una cuenta
+ni sincroniza dispositivos. Borrar los datos del navegador elimina este perfil.
+Un backend puede implementar la misma interfaz y reemplazar su registro en Program.cs.
+business-identity.js restaura la paleta al cargar y genera tokens CSS con contraste.
+Los colores originales se conservan como primary, secondary y tertiary; para texto
+se derivan alternativas legibles cuando una combinación no tiene contraste suficiente.

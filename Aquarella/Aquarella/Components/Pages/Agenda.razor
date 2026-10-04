@@ -1,9 +1,119 @@
 @page "/agenda"
+@rendermode InteractiveServer
+@using Aquarella.Models
+@using System.Globalization
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject Aquarella.Services.AgendaStore Store
 
-<PageTitle>Agenda / Reservas · Aquarella</PageTitle>
-
-<main class="module-page">
+<PageTitle>Agenda / Calendario · Aquarella</PageTitle>
+<main class="module-page agenda-page">
     <BackToDashboard />
-    <h1>Agenda / Reservas</h1>
+    <h1>Agenda / Calendario</h1>
+    <div class="month-navigation">
+        <button disabled="@(month.Year == 1 && month.Month == 1)" aria-label="Mes anterior" @onclick="() => MoveMonth(-1)">←</button>
+        <h2>@month.ToString("MMMM yyyy", Spanish)</h2>
+        <button disabled="@(month.Year == 9999 && month.Month == 12)" aria-label="Mes siguiente" @onclick="() => MoveMonth(1)">→</button>
+        <button class="today-button" @onclick="Today">Hoy</button>
+    </div>
+    <p class="status" role="status" aria-live="polite">@status</p>
+    <div class="calendar" aria-label="Calendario mensual">
+        @foreach (var label in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" }) { <span class="weekday">@label</span> }
+        @for (var blank = 0; blank < Offset; blank++) { <div class="blank-day" aria-hidden="true"></div> }
+        @for (var day = 1; day <= DateTime.DaysInMonth(month.Year, month.Month); day++)
+        {
+            var date = new DateOnly(month.Year, month.Month, day);
+            var count = Store.Notes.Count(n => n.Date == date);
+            <button id="day-@date.ToString("yyyy-MM-dd")" class="day-card @(date == DateOnly.FromDateTime(DateTime.Today) ? "is-today" : "") @(date == selected ? "is-selected" : "")" disabled="@(!ready || busy)" aria-label="@(date.ToString("d MMMM yyyy", Spanish) + $", {count} notas")" aria-pressed="@(date == selected)" @onclick="() => SelectDay(date)">
+                <span class="day-number">@day</span>
+                @if (count > 0) { <span class="note-indicator"><span aria-hidden="true">●</span> @count<span class="note-word"> notas</span></span> }
+            </button>
+        }
+    </div>
+    @if (selected is DateOnly selectedDate)
+    {
+        <section id="agenda-popover" class="notes-panel" role="dialog" aria-modal="false" aria-labelledby="notes-date" @onkeydown="PopoverKey">
+            <div class="panel-heading"><h2 id="notes-date">@selectedDate.ToString("d MMMM yyyy", Spanish)</h2><button disabled="@busy" aria-label="Cerrar panel de notas" @onclick="Close">✕</button></div>
+            <div class="notes-list">
+                @foreach (var note in Store.Notes.Where(n => n.Date == selectedDate).OrderBy(n => n.Time ?? "99:99").ThenBy(n => n.Title))
+                {
+                    <article class="note" @key="note.Id"><div><h3>@(string.IsNullOrWhiteSpace(note.Title) ? "Nota sin título" : note.Title) @if (note.Time is not null) { <small>@note.Time</small> }</h3><p>@note.Content</p></div><div class="note-actions"><button disabled="@busy" @onclick="() => Edit(note)">Editar</button><button disabled="@busy" @onclick="() => deleteId = note.Id">Eliminar</button></div>
+                        @if (deleteId == note.Id) { <div class="delete-confirm">¿Eliminar esta nota? <button disabled="@busy" @onclick="() => Delete(note.Id)">Sí, eliminar</button><button disabled="@busy" @onclick="() => deleteId = null">Cancelar</button></div> }
+                    </article>
+                }
+            </div>
+            <p class="note-status @(hasError ? "note-error" : "")" role="status" aria-live="polite">@status</p>
+            <form novalidate @onsubmit="Save" @onsubmit:preventDefault>
+                <h3>@(editId is null ? "Nueva nota" : "Editar nota")</h3>
+                <div class="note-fields"><label>Título<input @bind="title" @bind:event="oninput" maxlength="120" /></label><label>Hora (opcional)<input type="time" value="@time" @oninput="e => time = e.Value?.ToString() ?? string.Empty" /></label><label class="content-field">Comentario / descripción<textarea @bind="content" @bind:event="oninput" maxlength="4000" rows="4"></textarea></label></div>
+                <div class="form-actions"><button class="save-button" disabled="@busy" type="submit">Guardar nota</button><button type="button" disabled="@busy" @onclick="Cancel">Cancelar</button></div>
+            </form>
+        </section>
+    }
+    <p class="storage-note">Las notas se guardan en este navegador y se conservan al recargar.</p>
 </main>
+
+@code {
+    private static readonly CultureInfo Spanish = CultureInfo.GetCultureInfo("es-AR");
+    private DateTime month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private int Offset => ((int)month.DayOfWeek + 6) % 7;
+    private DateOnly? selected;
+    private Guid? editId, deleteId;
+    private string title = "", content = "", time = "";
+    private string? status;
+    private bool ready, busy, hasError;
+    private IJSObjectReference? popover;
+    private bool positionPending;
+    protected override void OnInitialized() => Store.Changed += Changed;
+    private void Changed() => _ = InvokeAsync(StateHasChanged);
+    public async ValueTask DisposeAsync() {
+        Store.Changed -= Changed;
+        if (popover is not null) { try { await popover.InvokeVoidAsync("stop"); await popover.DisposeAsync(); } catch (JSDisconnectedException) { } }
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) {
+            if (selected is not null && popover is not null && positionPending) { positionPending = false; await popover.InvokeVoidAsync("open", "day-" + selected.Value.ToString("yyyy-MM-dd")); }
+            else if (selected is null && popover is not null) await popover.InvokeVoidAsync("stop");
+            return;
+        }
+        try { await Store.InitializeAsync(); popover = await JS.InvokeAsync<IJSObjectReference>("import", "./agenda-popover.js"); ready = true; }
+        catch (Exception e) when (e is JSException or System.Text.Json.JsonException) { status = "No se pudieron cargar las notas. Recargá para volver a intentar; los datos guardados se conservaron."; }
+        StateHasChanged();
+    }
+    private void MoveMonth(int direction) { month = month.AddMonths(direction); selected = null; Reset(); }
+    private void Today() { month = new(DateTime.Today.Year, DateTime.Today.Month, 1); SelectDay(DateOnly.FromDateTime(DateTime.Today)); }
+    private void SelectDay(DateOnly date) { selected = date; Reset(); status = null; hasError = false; positionPending = true; }
+    private void Reset() { editId = null; deleteId = null; title = ""; content = ""; time = ""; }
+    private void Close() { Reset(); selected = null; }
+    private void Cancel() { Reset(); status = null; hasError = false; }
+    private void PopoverKey(KeyboardEventArgs e) { if (e.Key == "Escape" && !busy) Close(); }
+    private void Edit(AgendaNote note) { editId = note.Id; title = note.Title; content = note.Content; time = note.Time ?? ""; deleteId = null; }
+    private async Task Save()
+    {
+        if (busy || !ready || selected is null) return;
+        hasError = true;
+        if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(content)) { status = "Ingresá al menos un título o un comentario. La hora es opcional."; return; }
+        string? normalizedTime = null;
+        if (!string.IsNullOrWhiteSpace(time)) {
+            if (!TimeOnly.TryParse(time, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedTime)) { status = "Ingresá una hora válida."; return; }
+            normalizedTime = parsedTime.ToString("HH:mm", CultureInfo.InvariantCulture);
+        }
+        var note = new AgendaNote(editId ?? Guid.NewGuid(), selected.Value, title.Trim(), content, normalizedTime);
+        busy = true;
+        try { await Store.SaveAsync(note); Reset(); hasError = false; status = "Nota guardada."; }
+        catch (ArgumentException) { status = "Revisá el título, el contenido o la hora de la nota."; }
+        catch (JSException) { status = "No se pudo guardar. Revisá el espacio o los permisos del navegador; los datos anteriores se conservaron."; }
+        finally { busy = false; }
+    }
+    private async Task Delete(Guid id)
+    {
+        busy = true;
+        try { await Store.DeleteAsync(id); if (editId == id) Reset(); deleteId = null; status = "Nota eliminada."; }
+        catch (JSException) { status = "No se pudo eliminar la nota. Los datos anteriores se conservaron."; }
+        finally { busy = false; }
+    }
+}
+
+
 

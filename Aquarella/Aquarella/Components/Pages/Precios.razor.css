@@ -1,0 +1,15 @@
+.prices-page { max-width: 1200px; margin: 0 auto; }
+.intro, .note, .status { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.status { min-height: 21px; }
+.table-container, .empty-state { border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--surface-text); overflow-x: auto; }
+.empty-state { padding: 28px; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+th, td { padding: 20px 16px; border-bottom: 1px solid var(--border); vertical-align: top; }
+thead th { color: var(--heading); font-size: 13px; font-weight: 600; }
+tbody th { min-width: 140px; max-width: 230px; overflow-wrap: anywhere; font-weight: 600; }
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+input { box-sizing: border-box; width: 130px; min-width: 100px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--surface-text); font: inherit; }
+.calculated { white-space: nowrap; font-variant-numeric: tabular-nums; }
+small { display: block; margin-top: 8px; font-size: 11px; color: var(--surface-muted); }
+.reset-button { display: block; padding: 0; margin-top: 8px; background: transparent; border: 0; color: var(--accent-text); font: inherit; font-size: 12px; cursor: pointer; }
+input:focus-visible, button:focus-visible, .table-container:focus-visible { outline: 2px solid var(--secondary); outline-offset: 3px; }
