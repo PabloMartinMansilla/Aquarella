@@ -1,0 +1,168 @@
+@using Aquarella.Models
+@using Aquarella.Services
+@using System.ComponentModel.DataAnnotations
+@using System.Security.Cryptography
+@implements IDisposable
+@inject BusinessData Data
+@inject IInvoiceExtractor Extractor
+@inject ILogger<StockInvoiceImport> Logger
+
+<section class="product-form invoice-panel" aria-label="Cargar factura">
+    <div class="panel-heading"><h2>Cargar factura</h2><button class="quiet-button" disabled="@saving" @onclick="Close" aria-label="Cerrar carga de factura">✕</button></div>
+    <p class="hint">JPG, PNG, WebP o PDF · hasta 10 MB. Ningún archivo modifica Stock sin tu confirmación.</p>
+    <p class="hint">La lectura automática todavía no está conectada. Podés seleccionar un documento y transcribir sus líneas, o probar un ejemplo identificado como simulado.</p>
+    @if (stage == Stage.Selecting)
+    {
+        <div class="file-actions">
+            <label>Seleccionar documento<InputFile OnChange="SelectFile" accept="image/jpeg,image/png,image/webp,application/pdf" disabled="@processing" /></label>
+            <label>Tomar foto<InputFile OnChange="SelectFile" accept="image/jpeg,image/png,image/webp" capture="environment" disabled="@processing" /></label>
+        </div>
+        @if (file is not null) { <p class="file-name">@file.Name</p> }
+        <div class="form-actions">
+            <button class="primary-button" disabled="@(file is null || processing)" aria-busy="@processing" @onclick="Process">@(processing ? "Procesando…" : "Procesar documento")</button>
+            @if (documentKey is not null && !processing) { <button class="quiet-button" @onclick="ManualReview">Transcribir y revisar productos</button> }
+            <button class="quiet-button" disabled="@processing" @onclick="Demo">Usar ejemplo simulado</button>
+        </div>
+    }
+    else if (stage == Stage.Review)
+    {
+        <p class="hint">@(simulated ? "DATOS SIMULADOS: no se leyó una factura. Si confirmás, estas líneas sí se guardarán en Stock." : "Revisá la transcripción del documento antes de confirmar.")</p>
+        <p class="hint">El costo unitario es opcional. Si lo completás, reemplaza el costo de compra; se conservan el margen y el precio de venta manual. Subtotales, IVA y total no se usan como costo unitario.</p>
+        <EditForm EditContext="context" OnSubmit="Confirm">
+            <DataAnnotationsValidator />
+            @{ var proposal = Preview(); }
+            <div class="review-list">
+                @for (var i = 0; i < draft.Lines.Count; i++)
+                {
+                    var row = draft.Lines[i];
+                    var prediction = proposal?.ElementAtOrDefault(i);
+                    <article class="review-row" @key="row.Id">
+                        <div class="row-fields">
+                            <div><label for="invoice-name-@row.Id">Producto</label><StockTextInput id="@($"invoice-name-{row.Id}")" @bind-Value="row.Name" maxlength="120" disabled="@saving" /><ValidationMessage For="() => row.Name" /></div>
+                            <div><label for="invoice-quantity-@row.Id">Cantidad</label><StockNumberInput id="@($"invoice-quantity-{row.Id}")" @bind-Value="row.Quantity" min="0" max="2147483647" disabled="@saving" ParsingErrorMessage="Ingresá una cantidad entera válida." /><ValidationMessage For="() => row.Quantity" /></div>
+                            <div><label for="invoice-cost-@row.Id">Costo unitario</label><StockNumberInput id="@($"invoice-cost-{row.Id}")" @bind-Value="row.Cost" min="0" max="1000000000" step="0.01" disabled="@saving" ParsingErrorMessage="Ingresá un costo numérico válido." /><ValidationMessage For="() => row.Cost" /></div>
+                        </div>
+                        <div class="row-association">
+                            <label>Coincidencia<select @bind="row.Association" disabled="@saving"><option value="">Detectar coincidencia segura</option><option value="new">Crear como producto nuevo</option>@foreach (var p in Products) { <option value="@p.Id">Sumar a @p.Name</option> }</select></label>
+                            <button class="quiet-button" type="button" disabled="@saving" @onclick="() => Remove(row)">Quitar línea</button>
+                        </div>
+                        @if (prediction is not null)
+                        {
+                            <p class="proposal"><strong>@(prediction.Created ? "NUEVO" : "EXISTENTE — SUMAR STOCK")</strong><span>@(prediction.FinalQuantity - prediction.AddedQuantity) actuales + @prediction.AddedQuantity nuevas → @prediction.FinalQuantity</span></p>
+                        }
+                        else { <p class="hint">Completá los datos y resolvé las coincidencias para ver la propuesta.</p> }
+                    </article>
+                }
+            </div>
+            <p class="hint">Las cantidades se vuelven a comprobar con el Stock vigente al confirmar. Si hay varias coincidencias, elegí el producto exacto; no se fusionan por similitud.</p>
+            <div class="form-actions"><button type="button" class="quiet-button" disabled="@(saving || draft.Lines.Count >= 200)" @onclick="AddRow">Agregar línea</button><button type="submit" class="primary-button" disabled="@(saving || draft.Lines.Count == 0)" aria-busy="@saving">@(saving ? "Confirmando…" : "Confirmar carga")</button></div>
+        </EditForm>
+    }
+    else { <p>Carga completada. Podés cerrar este panel.</p> }
+    <p class="status" role="status" data-feedback aria-live="polite">@status</p>
+    <div class="form-actions"><button class="quiet-button" disabled="@saving" @onclick="Close">@(stage == Stage.Completed ? "Cerrar" : "Cancelar")</button></div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public List<StockProduct> Products { get; set; } = [];
+    [Parameter] public EventCallback Saved { get; set; }
+    [Parameter] public EventCallback Closed { get; set; }
+    [Parameter] public EventCallback<bool> BusyChanged { get; set; }
+    private enum Stage { Selecting, Review, Completed }
+    private Stage stage;
+    private IBrowserFile? file;
+    private string? documentKey, status;
+    private string operationKey = "";
+    private bool processing, saving, simulated;
+    private CancellationTokenSource? cancellation;
+    private readonly Draft draft = new();
+    private EditContext context = null!;
+    private ValidationMessageStore messages = null!;
+    protected override void OnInitialized()
+    {
+        context = new(draft); messages = new(context);
+        context.OnFieldChanged += (_, args) => { messages.Clear(args.FieldIdentifier); status = null; context.NotifyValidationStateChanged(); };
+    }
+    private void SelectFile(InputFileChangeEventArgs args)
+    {
+        file = null; documentKey = null; status = null;
+        var selected = args.File;
+        if (selected.Size is <= 0 or > InvoiceDocument.MaxBytes) { status = "Archivo no válido: debe tener contenido y pesar hasta 10 MB."; return; }
+        file = selected;
+    }
+    private async Task Process()
+    {
+        if (processing || file is null) return;
+        processing = true; documentKey = null; status = null; await BusyChanged.InvokeAsync(true);
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(20)); cancellation = cancel;
+        try
+        {
+            await using var source = file.OpenReadStream(InvoiceDocument.MaxBytes, cancel.Token);
+            using var buffer = new MemoryStream(); await source.CopyToAsync(buffer, cancel.Token);
+            var bytes = buffer.ToArray(); var type = InvoiceDocument.DetectType(bytes);
+            documentKey = "invoice:" + Convert.ToHexString(SHA256.HashData(bytes));
+            buffer.Position = 0;
+            var extracted = await Extractor.ExtractAsync(buffer, type, cancel.Token).WaitAsync(cancel.Token);
+            if (extracted.Lines.Count is < 1 or > 200) throw new InvoiceExtractionException("No se detectaron productos válidos o el documento supera las 200 líneas. Revisalo antes de continuar.");
+            BeginReview(documentKey, false, extracted.Lines.Select(l => new Row { Name = l.Name, Quantity = l.Quantity, Cost = l.UnitCost }));
+        }
+        catch (InvoiceExtractionException e) { status = e.Message; }
+        catch (OperationCanceledException) { status = "El procesamiento se canceló o superó el tiempo disponible. Volvé a intentar."; }
+        catch (Exception e) when (e is IOException or InvalidOperationException) { documentKey = null; status = "No se pudo procesar el archivo. Volvé a seleccionarlo o probá otro documento."; }
+        catch (Exception e) { Logger.LogWarning(e, "Invoice extraction failed"); status = "No se pudo leer el documento. Podés transcribir sus productos o intentar con otro archivo."; }
+        finally { processing = false; cancellation = null; await BusyChanged.InvokeAsync(false); }
+    }
+    private void ManualReview() { if (documentKey is not null) BeginReview(documentKey, false, [new Row()]); }
+    private void Demo() => BeginReview("demo:" + Guid.NewGuid().ToString("N"), true, [new Row { Name = "Coca Cola 2,25 L", Quantity = 6, Cost = 3200 }, new Row { Name = "Sprite 2,25 L", Quantity = 4, Cost = 2900 }]);
+    private void BeginReview(string key, bool demo, IEnumerable<Row> rows)
+    {
+        operationKey = key; simulated = demo; draft.Lines.Clear(); draft.Lines.AddRange(rows); messages.Clear(); context.NotifyValidationStateChanged(); stage = Stage.Review; status = null;
+    }
+    private void AddRow() { draft.Lines.Add(new()); status = null; }
+    private void Remove(Row row) { draft.Lines.Remove(row); messages.Clear(); context.NotifyValidationStateChanged(); }
+    private StockIntakeLine Line(Row row) => new(row.Name, row.Quantity!.Value, row.Cost, Guid.TryParse(row.Association, out var id) ? id : null, row.Association == "new");
+    private IReadOnlyList<StockIntakeResult>? Preview()
+    {
+        if (draft.Lines.Any(r => r.Quantity is null)) return null;
+        try { return StockIntakePlanner.Plan(Products.Select(p => new StockIntakeItem(p.Id, p.Name, p.Quantity)), draft.Lines.Select(Line).ToList()); }
+        catch (ValidationException) { return null; }
+    }
+    private async Task Confirm()
+    {
+        if (saving || stage != Stage.Review) return;
+        messages.Clear();
+        foreach (var row in draft.Lines)
+        {
+            var errors = new List<ValidationResult>();
+            Validator.TryValidateObject(row, new(row), errors, true);
+            foreach (var error in errors) foreach (var member in error.MemberNames) messages.Add(new FieldIdentifier(row, member), error.ErrorMessage!);
+        }
+        context.NotifyValidationStateChanged();
+        if (!context.Validate() || context.GetValidationMessages().Any()) { status = "Revisá los campos marcados antes de confirmar."; return; }
+        saving = true; status = null; await BusyChanged.InvokeAsync(true);
+        try
+        {
+            var outcome = await Data.ApplyStockIntakeAsync(draft.Lines.Select(Line).ToList(), operationKey);
+            await Saved.InvokeAsync();
+            stage = Stage.Completed;
+            status = outcome.AlreadyApplied ? "Esta carga ya estaba confirmada. No se volvió a sumar Stock." : $"Carga guardada: {outcome.Lines.Count(l => l.Created)} productos nuevos, {outcome.Lines.Count(l => !l.Created)} actualizaciones y {outcome.Lines.Sum(l => (long)l.AddedQuantity)} unidades agregadas.";
+        }
+        catch (ValidationException e) { status = e.Message; }
+        catch (Exception e) when (PersistenceErrors.IsStorageError(e)) { status = "No se pudo completar la confirmación. Podés reintentar: una carga ya guardada no se aplica dos veces."; }
+        finally { saving = false; await BusyChanged.InvokeAsync(false); }
+    }
+    private async Task Close() { if (saving) return; cancellation?.Cancel(); await Closed.InvokeAsync(); }
+    public void Dispose() => cancellation?.Cancel();
+    private sealed class Draft { public List<Row> Lines { get; } = []; }
+    private sealed class Row
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        [Required(ErrorMessage = "Ingresá el producto."), StringLength(120, ErrorMessage = "Máximo 120 caracteres.")]
+        public string Name { get; set; } = "";
+        [Required(ErrorMessage = "Ingresá la cantidad."), Range(0, int.MaxValue, ErrorMessage = "La cantidad no puede ser negativa ni superar 2.147.483.647.")]
+        public int? Quantity { get; set; }
+        [Range(typeof(decimal), "0", "1000000000", ErrorMessage = "Costo entre 0 y 1.000.000.000.")]
+        public decimal? Cost { get; set; }
+        public string Association { get; set; } = "";
+    }
+}

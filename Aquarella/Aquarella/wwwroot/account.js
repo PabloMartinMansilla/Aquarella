@@ -8,6 +8,6 @@ document.querySelector('[data-strength="true"]')?.addEventListener('input', even
 });
 document.querySelectorAll('form').forEach(form => form.addEventListener('submit', event => {
     if (form.dataset.submitting) { event.preventDefault(); return; }
-    form.dataset.submitting = 'true'; form.querySelectorAll('[type="submit"]').forEach(b => { b.disabled = true; b.textContent = 'Procesando…'; });
+    form.dataset.submitting = 'true'; form.querySelectorAll('[type="submit"]').forEach(b => { b.disabled = true; b.setAttribute('aria-busy', 'true'); b.textContent = 'Procesando…'; });
 }));
 window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });

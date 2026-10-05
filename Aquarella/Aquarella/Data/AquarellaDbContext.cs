@@ -7,6 +7,7 @@ public sealed class AquarellaDbContext(DbContextOptions<AquarellaDbContext> opti
     public DbSet<AccountLoginSession> AccountLoginSessions => Set<AccountLoginSession>();
     public DbSet<Business> Businesses => Set<Business>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<StockIntakeReceipt> StockIntakeReceipts => Set<StockIntakeReceipt>();
     public DbSet<CalendarEntry> CalendarEntries => Set<CalendarEntry>();
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -35,6 +36,10 @@ public sealed class AquarellaDbContext(DbContextOptions<AquarellaDbContext> opti
         model.Entity<Product>().Property(p => p.SalePrice).HasPrecision(18, 2);
         model.Entity<Product>().Property(p => p.DesiredProfitPercent).HasPrecision(8, 2);
         model.Entity<Product>().ToTable(t => t.HasCheckConstraint("CK_Product_Quantity", "Quantity >= 0"));
+        model.Entity<StockIntakeReceipt>().HasOne<Business>().WithMany().HasForeignKey(r => r.BusinessId).OnDelete(DeleteBehavior.Cascade);
+        model.Entity<StockIntakeReceipt>().Property(r => r.OperationKey).HasMaxLength(100).IsRequired();
+        model.Entity<StockIntakeReceipt>().Property(r => r.ResultsJson).IsRequired();
+        model.Entity<StockIntakeReceipt>().HasIndex(r => new { r.BusinessId, r.OperationKey }).IsUnique();
         model.Entity<CalendarEntry>().HasOne(n => n.Business).WithMany().HasForeignKey(n => n.BusinessId).OnDelete(DeleteBehavior.Cascade);
         model.Entity<CalendarEntry>().HasIndex(n => new { n.BusinessId, n.Date });
         model.Entity<CalendarEntry>().Property(n => n.Title).HasMaxLength(120).IsRequired();

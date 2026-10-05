@@ -1,4 +1,13 @@
 .dashboard { padding: 64px 0 80px; }
+.welcome-banner { display: flex; align-items: center; gap: var(--space-md); padding: var(--space-lg); margin-bottom: var(--space-xl); background: var(--surface); color: var(--surface-text); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); animation: welcome-enter calc(var(--motion-slow, 280ms) * 2) var(--ease-soft, ease-out) both; }
+.welcome-icon { flex-shrink: 0; }
+.welcome-banner > div { min-width: 0; }
+.welcome-banner h2 { font-size: clamp(18px, 2.5vw, 22px); color: var(--heading); overflow-wrap: anywhere; }
+.welcome-banner p { margin: 6px 0 0; font-size: 14px; line-height: 1.6; color: var(--surface-muted); }
+html[data-brand-intro="playing"] .welcome-banner { animation-play-state: paused; }
+@keyframes welcome-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (max-width: 600px) { .welcome-banner { padding: var(--space-md); gap: 12px; } .welcome-banner .welcome-icon { width: 44px; height: 44px; } .welcome-banner p { font-size: 13px; } }
+@media (prefers-reduced-motion: reduce) { .welcome-banner { animation: none; opacity: 1; transform: none; } }
 .section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 36px; }
 .eyebrow { margin: 0 0 9px; color: var(--muted, #798e81); font-size: 10px; font-weight: 700; letter-spacing: 1.8px; }
 h1 { margin: 0; color: var(--text, #203e32); font-size: clamp(23px, 3vw, 30px); font-weight: 600; letter-spacing: -0.8px; }

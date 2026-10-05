@@ -1,6 +1,18 @@
-.product-metrics { list-style: none; padding: 0; margin: 0; }
-li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); border-top: 1px solid var(--border-soft); padding-block: var(--space-md); font-size: 14px; }
-strong { overflow-wrap: anywhere; font-weight: 600; }
-.percentage { color: var(--heading); font-variant-numeric: tabular-nums; }
-.detail { grid-column: 1 / -1; color: var(--surface-muted); font-size: 13px; overflow-wrap: anywhere; }
-@media (max-width: 600px) { li { grid-template-columns: 1fr; } .percentage { font-size: 16px; } }
+.product-metrics { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.product-detail { position: relative; }
+.product-detail::details-content { content-visibility: visible; }
+summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; min-height: 48px; align-content: center; }
+summary::-webkit-details-marker { display: none; }
+summary:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 4px; border-radius: 4px; }
+.product-name { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; color: var(--surface-text); }
+.percentage { font-size: 13px; color: var(--heading); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; text-align: right; max-width: 150px; }
+.signed-track { position: relative; display: block; grid-column: 1 / -1; height: 8px; background: var(--border-soft); border-radius: 6px; }
+.zero-axis { position: absolute; left: 50%; top: -2px; width: 1px; height: 12px; background: var(--surface-muted); }
+.profit-bar { position: absolute; height: 8px; border-radius: 6px; }
+.positive { left: 50%; background: var(--heading); transform-origin: left; }
+.negative { right: 50%; background: var(--danger); transform-origin: right; }
+.product-tooltip { margin-top: 10px; padding: 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface-elevated); display: none; gap: 6px; font-size: 12px; color: var(--surface-muted); overflow-wrap: anywhere; }
+.product-detail[open] .product-tooltip { display: grid; }
+.product-tooltip span { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.product-tooltip a { display: inline-flex; align-items: center; min-height: 44px; color: var(--heading); }
+@media (hover: hover) and (min-width: 601px) { .product-detail:not([open]):hover .product-tooltip { display: grid; position: absolute; left: 0; right: 0; top: 100%; margin: 4px 0 0; z-index: 4; box-shadow: var(--shadow-md); background: var(--surface); } }

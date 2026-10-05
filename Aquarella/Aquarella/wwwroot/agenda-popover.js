@@ -1,6 +1,9 @@
-let cleanup, returnFocus;
+let cleanup, returnFocus, currentPanel, lastRect;
 export function stop(restoreFocus = true) {
     cleanup?.(); cleanup = null;
+    if (restoreFocus && currentPanel && !currentPanel.isConnected)
+        window.aquarellaVisualFeedback?.exitSurface(currentPanel, lastRect);
+    currentPanel = null; lastRect = null;
     if (restoreFocus && returnFocus?.isConnected && (document.activeElement === document.body || document.getElementById('agenda-popover')?.contains(document.activeElement)))
         returnFocus.focus({ preventScroll: true });
     returnFocus = null;
@@ -10,6 +13,7 @@ export function open(anchorId) {
     const anchor = document.getElementById(anchorId);
     const panel = document.getElementById('agenda-popover');
     if (!anchor || !panel) return;
+    currentPanel = panel;
     returnFocus = anchor;
     const place = () => {
         const margin = 12, gap = 10;
@@ -30,6 +34,7 @@ export function open(anchorId) {
         panel.style.left = `${Math.max(viewportLeft + margin, left)}px`;
         panel.style.top = `${top}px`;
         panel.style.visibility = 'visible';
+        lastRect = { left: parseFloat(panel.style.left), top: parseFloat(panel.style.top), width, height };
     };
     const observer = new ResizeObserver(place);
     observer.observe(panel);

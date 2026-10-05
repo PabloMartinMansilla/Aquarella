@@ -50,6 +50,7 @@ builder.Services.AddRateLimiter(options => {
 });
 builder.Services.AddScoped<IBusinessProfilePersistence, DatabaseBusinessProfilePersistence>();
 builder.Services.AddScoped<BusinessData>();
+builder.Services.AddScoped<IInvoiceExtractor, UnavailableInvoiceExtractor>();
 builder.Services.AddSingleton<DatabaseChanges>();
 var connection = builder.Configuration.GetConnectionString("Aquarella") ?? "Data Source=App_Data/aquarella.db";
 var sqlite = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(connection);

@@ -92,6 +92,41 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
             .ExecuteUpdateAsync(s => s.SetProperty(p => p.Quantity, p => p.Quantity + adjustment).SetProperty(p => p.UpdatedAt, DateTime.UtcNow));
         if (changed != 1) throw new ArgumentException("Cantidad final inválida o producto eliminado."); changes.Publish(id, "products");
     }
+    public async Task<StockIntakeOutcome> ApplyStockIntakeAsync(IReadOnlyList<StockIntakeLine> lines, string operationKey)
+    {
+        if (string.IsNullOrWhiteSpace(operationKey) || operationKey.Length > 100) throw new ValidationException("Identificador de carga inválido.");
+        await EnsureImportedAsync();
+        await using var db = await factory.CreateDbContextAsync();
+        var id = await BusinessId(db);
+        // SQLite serializes writers; receipt and all product updates commit together.
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var receipt = await db.StockIntakeReceipts.SingleOrDefaultAsync(r => r.BusinessId == id && r.OperationKey == operationKey);
+        if (receipt is not null)
+            return new(System.Text.Json.JsonSerializer.Deserialize<List<StockIntakeResult>>(receipt.ResultsJson)!, true);
+        var products = await db.Products.Where(p => p.BusinessId == id).ToListAsync();
+        var plan = StockIntakePlanner.Plan(products.Select(p => new StockIntakeItem(p.Id, p.Name, p.Quantity)), lines);
+        for (var i = 0; i < plan.Count; i++)
+        {
+            var change = plan[i];
+            var product = products.SingleOrDefault(p => p.Id == change.ProductId);
+            if (product is null)
+            {
+                product = new Product { Id = change.ProductId, BusinessId = id, Name = change.Name };
+                products.Add(product); db.Products.Add(product);
+            }
+            product.Quantity = change.FinalQuantity;
+            if (lines[i].UnitCost is decimal cost)
+            {
+                product.Cost = cost;
+                if (!product.ManualSalePrice) product.SalePrice = decimal.Round(cost * (1 + product.DesiredProfitPercent / 100), 2, MidpointRounding.AwayFromZero);
+            }
+            product.UpdatedAt = DateTime.UtcNow;
+        }
+        db.StockIntakeReceipts.Add(new() { BusinessId = id, OperationKey = operationKey, ResultsJson = System.Text.Json.JsonSerializer.Serialize(plan) });
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+        changes.Publish(id, "products");
+        return new(plan, false);
+    }
     public async Task DeleteProductAsync(Guid productId) {
         await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
         await db.Products.Where(p => p.Id == productId && p.BusinessId == id).ExecuteDeleteAsync(); changes.Publish(id, "products");

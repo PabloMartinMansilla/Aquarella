@@ -1,17 +1,16 @@
 @page "/metricas"
 @rendermode InteractiveServer
-@implements IDisposable
+@implements IAsyncDisposable
 @using Aquarella.Models
 @using System.Globalization
 @inject Aquarella.Services.MetricsService Metrics
 @inject Aquarella.Services.BusinessData Data
+@inject IJSRuntime JS
 
 <PageTitle>Métricas · Aquarella</PageTitle>
-
-<main class="module-page metrics-page">
+<main class="module-page metrics-page" @ref="page">
     <BackToDashboard Prominent="true" />
-    <h1>Métricas</h1>
-    <div class="intro-row"><p class="intro">Una mirada a tu inventario y precios actuales.</p><button class="refresh-button" @onclick="Load" disabled="@loading" aria-busy="@loading">@(loading ? "Actualizando…" : "Actualizar")</button></div>
+    <div class="intro-row"><div><h1>Métricas</h1><p class="scope-note">Inventario actual · Valores potenciales, no ventas realizadas.</p></div><button class="refresh-button" @onclick="Load" disabled="@loading" aria-busy="@loading">@(loading ? "Actualizando…" : "Actualizar")</button></div>
     @if (error is not null)
     {
         <section class="surface" role="alert"><h2>No pudimos actualizar las métricas</h2><p>@error</p><button class="refresh-button" @onclick="Load">Volver a intentar</button></section>
@@ -19,65 +18,98 @@
     else if (snapshot is null) { <p role="status">Cargando métricas…</p> }
     else if (snapshot.ProductCount == 0)
     {
-        <section class="surface"><h2>Todavía no hay productos para analizar</h2><p>Agregá productos en Stock y configurá sus costos y precios para conocer el valor de tu inventario.</p><a class="action-link" href="/stock">Ir a Stock <span aria-hidden="true">↗</span></a></section>
+        <section class="surface empty-metrics"><span class="empty-symbol" aria-hidden="true">▥</span><h2>Todavía no hay datos suficientes</h2><p>Empezá con tus productos.</p><a class="action-link" href="/stock">Ir a Stock <span aria-hidden="true">↗</span></a></section>
     }
     else
     {
-        <p class="scope-note">Estado actual · Los valores potenciales no representan ventas, ingresos ni ganancias realizadas.</p>
-        <section class="kpi-grid" aria-label="Resumen del inventario">
-            <article class="kpi"><h2>Productos</h2><strong>@Count(snapshot.ProductCount)</strong><p>Productos registrados en Stock.</p></article>
-            <article class="kpi"><h2>Unidades disponibles</h2><strong>@Count(snapshot.Units)</strong><p>Suma de las cantidades actuales.</p></article>
-            <article class="kpi"><h2>Sin stock</h2><strong>@Count(snapshot.OutOfStock)</strong><p>Productos sin unidades disponibles.</p><a href="/stock">Revisar Stock</a></article>
-            <article class="kpi"><h2>Inventario a costo</h2><strong>@Money(snapshot.InventoryCost)</strong><p>@Coverage(snapshot.ProductsWithCost, snapshot.ProductsInStock, "costo")</p></article>
-            <article class="kpi"><h2>Valor potencial de venta</h2><strong>@Money(snapshot.InventorySaleValue)</strong><p>@Coverage(snapshot.ProductsWithSalePrice, snapshot.ProductsInStock, "precio")</p></article>
+        <div @key="revision">
+        <section class="metric-grid" aria-label="Resumen del inventario">
+            <MetricKpi Title="Inventario a costo" Value="snapshot.InventoryCost" Format="money" Note="@Coverage(snapshot.ProductsWithCost, snapshot.ProductsInStock)" Help="Suma del costo por las unidades disponibles. Solo incluye productos con costo mayor que cero; un costo cero todavía no distingue un dato pendiente de una adquisición gratuita." />
+            <MetricKpi Title="Valor potencial de venta" Value="snapshot.InventorySaleValue" Format="money" Note="@Coverage(snapshot.ProductsWithSalePrice, snapshot.ProductsInStock)" Help="Suma del precio efectivo de venta por las unidades disponibles con precio configurado. No representa ingresos realizados." />
+            <MetricKpi Title="Ganancia sobre el costo" Value="snapshot.WeightedProfitPercent" Format="percent" Note="Potencial · ponderada por stock" Help="(Venta − costo) ÷ costo × 100, ponderado por unidades. Usa los mismos productos con costo en ambos valores. No es un margen sobre ventas." />
+            <MetricKpi Title="Unidades disponibles" Value="snapshot.Units" Help="Suma de las cantidades actuales de todos los productos." />
+            <MetricKpi Title="Productos" Value="snapshot.ProductCount" Help="Productos registrados en Stock, incluyendo los que no tienen unidades." />
+            <MetricKpi Title="Sin stock" Value="snapshot.OutOfStock" Help="Productos sin unidades disponibles." Href="/stock" LinkText="Revisar Stock" />
         </section>
-        <section class="surface" aria-labelledby="profit-summary">
-            <h2 id="profit-summary">Ganancia potencial sobre el costo</h2>
-            <strong class="profit-value">@Percent(snapshot.WeightedProfitPercent)</strong>
-            <p>Ponderada por el valor del stock con costo registrado. Se calcula como (valor de venta − valor a costo) ÷ valor a costo × 100, usando los mismos productos en ambos valores.</p>
-            <p class="hint">@snapshot.ProductsWithCost de @snapshot.ProductsInStock productos con stock incluidos. Los costos cero quedan fuera porque Aquarella todavía no distingue un costo pendiente de una adquisición gratuita.</p>
-            @if (snapshot.WeightedProfitPercent is null) { <p class="hint">Necesitás unidades con costo registrado para calcular este porcentaje.</p> }
-            <a class="action-link" href="/precios">Revisar costos y precios <span aria-hidden="true">↗</span></a>
-        </section>
-        <section class="surface" aria-labelledby="profit-products">
-            <h2 id="profit-products">Ganancia estimada por producto</h2>
-            <p class="hint">@snapshot.ProductsWithProfit de @snapshot.ProductCount productos tienen costo para calcular su ganancia. El porcentaje se expresa sobre el costo, igual que en Precios. Incluye productos que hoy no tienen stock.</p>
-            @if (snapshot.ProductsWithProfit == 0)
-            {
-                <p>Todavía no hay costos suficientes para comparar productos.</p>
-            }
-            else
-            {
-                <div class="ranking-grid">
-                    <div><h3>Menor ganancia sobre el costo</h3><MetricProductList Products="snapshot.LowestProfit" /></div>
-                    <div><h3>Mayor ganancia sobre el costo</h3><MetricProductList Products="snapshot.HighestProfit" /></div>
+        <div class="chart-grid">
+            <section class="surface profit-chart" data-metric-surface aria-labelledby="profit-products">
+                <div class="section-heading"><div><h2 id="profit-products">Ganancia por producto</h2><p class="hint">% sobre costo · hasta 5 por grupo</p></div><a class="text-link" href="/precios">Precios ↗</a></div>
+                @if (snapshot.ProductsWithProfit == 0) { <p class="chart-empty">Agregá costos para comparar productos.</p> }
+                else
+                {
+                    <div class="ranking-grid @(snapshot.ProductsWithProfit <= 5 ? "single-ranking" : "")">
+                        <div>@if (snapshot.ProductsWithProfit > 5) { <h3>Mayor ganancia</h3> }<MetricProductList Products="snapshot.HighestProfit" Scale="@ProfitScale" /></div>
+                        @if (snapshot.ProductsWithProfit > 5) { <div><h3>Menor ganancia</h3><MetricProductList Products="snapshot.LowestProfit" Scale="@ProfitScale" /></div> }
+                    </div>
+                    <p class="hint coverage-caption">← Pérdida · 0 · Ganancia → · Escala común ±@Percent(ProfitScale)<br />@Count(snapshot.ProductsWithProfit) / @Count(snapshot.ProductCount) con costo · incluye productos sin stock</p>
+                }
+            </section>
+            <section class="surface stock-chart" data-metric-surface aria-labelledby="stock-distribution">
+                <h2 id="stock-distribution">Distribución de stock</h2>
+                <div class="donut-wrap">
+                    <svg class="stock-donut" viewBox="0 0 120 120" role="img" aria-label="@($" {Count(snapshot.ProductsInStock)} productos con stock y {Count(snapshot.OutOfStock)} sin stock")">
+                        <circle class="donut-track" cx="60" cy="60" r="48" />
+                        <circle class="donut-arc in-stock" cx="60" cy="60" r="48" pathLength="100" stroke-dasharray="@($"{Invariant(StockPercent)} {Invariant(100m - StockPercent)}")" data-metric-ring data-ring-value="@Invariant(StockPercent)" />
+                        <circle class="donut-arc out-stock" cx="60" cy="60" r="48" pathLength="100" stroke-dasharray="@($"{Invariant(100m - StockPercent)} {Invariant(StockPercent)}")" stroke-dashoffset="@Invariant(-StockPercent)" data-metric-ring data-ring-value="@Invariant(100m - StockPercent)" />
+                    </svg>
+                    <div class="donut-center" aria-hidden="true"><strong>@Count(snapshot.ProductCount)</strong><span>productos</span></div>
                 </div>
-                <p class="hint">Hasta cinco productos por lista. La ganancia por unidad es precio efectivo de venta menos costo.</p>
-            }
-            <a class="action-link" href="/precios">Analizar en Precios <span aria-hidden="true">↗</span></a>
-        </section>
-        <section class="surface" aria-labelledby="active-problems">
-            <h2 id="active-problems">Problemas activos</h2>
-            @if (snapshot.ActiveNotices == 0) { <p>No hay avisos que requieran tu atención.</p> }
-            else
-            {
-                <p>@snapshot.ActiveNotices avisos activos · @snapshot.Notices.Where(n => n.Severity == NoticeSeverity.Critical).Sum(n => n.Count) críticos · @snapshot.Notices.Where(n => n.Severity == NoticeSeverity.Attention).Sum(n => n.Count) de atención.</p>
-                <ul class="cause-list">
-                    @foreach (var notice in snapshot.Notices) { <li><span>@NoticeTitle(notice.Kind)</span><strong>@notice.Count</strong></li> }
-                </ul>
-                <p class="hint">Un producto puede tener un problema de stock y otro de precio.</p>
-            }
-            <a class="action-link" href="/avisos">Revisar Avisos <span aria-hidden="true">↗</span></a>
-        </section>
-        <p class="scope-note">Aquarella aún no registra ventas ni historial de movimientos de stock o precios. Estas métricas describen el estado actual; no muestran tendencias.</p>
+                <div class="stock-legend">
+                    <details><summary><span class="legend-dot normal"></span><span>Con stock</span><strong>@Count(snapshot.ProductsInStock)</strong></summary><p>@Percent(StockPercent) del catálogo tiene unidades disponibles.</p></details>
+                    <details><summary><span class="legend-dot critical"></span><span>Sin stock</span><strong>@Count(snapshot.OutOfStock)</strong></summary><p>@Percent(100m - StockPercent) del catálogo no tiene unidades disponibles. <a href="/stock">Revisar Stock ↗</a></p></details>
+                </div>
+            </section>
+        </div>
+        <div class="secondary-grid">
+            <section class="surface" data-metric-surface aria-labelledby="pricing-coverage">
+                <div class="section-heading"><h2 id="pricing-coverage">Cobertura de precios</h2><a class="text-link" href="/precios">Completar ↗</a></div>
+                @if (snapshot.ProductsInStock == 0) { <p class="chart-empty">No hay productos con unidades disponibles.</p> }
+                else
+                {
+                    <div class="coverage-item"><div><span>Costo registrado</span><strong>@Count(snapshot.ProductsWithCost) / @Count(snapshot.ProductsInStock)</strong></div><div class="progress-track" role="progressbar" aria-label="Productos con stock y costo registrado" aria-valuemin="0" aria-valuemax="@snapshot.ProductsInStock" aria-valuenow="@snapshot.ProductsWithCost"><span data-metric-bar style="@($"width:{Invariant(Ratio(snapshot.ProductsWithCost, snapshot.ProductsInStock))}%")"></span></div></div>
+                    <div class="coverage-item"><div><span>Precio de venta</span><strong>@Count(snapshot.ProductsWithSalePrice) / @Count(snapshot.ProductsInStock)</strong></div><div class="progress-track" role="progressbar" aria-label="Productos con stock y precio de venta" aria-valuemin="0" aria-valuemax="@snapshot.ProductsInStock" aria-valuenow="@snapshot.ProductsWithSalePrice"><span data-metric-bar style="@($"width:{Invariant(Ratio(snapshot.ProductsWithSalePrice, snapshot.ProductsInStock))}%")"></span></div></div>
+                    <p class="hint">Sobre productos con stock. Los importes son parciales si faltan datos.</p>
+                }
+            </section>
+            <section class="surface" data-metric-surface aria-labelledby="active-problems">
+                <div class="section-heading"><h2 id="active-problems">Avisos activos <span class="total-badge">@Count(snapshot.ActiveNotices)</span></h2><a class="text-link" href="/avisos">Revisar ↗</a></div>
+                @if (snapshot.ActiveNotices == 0) { <p class="chart-empty">✓ Sin avisos pendientes.</p> }
+                else
+                {
+                    <ul class="cause-list">
+                        @foreach (var notice in snapshot.Notices)
+                        {
+                            <li><details><summary><span>@NoticeTitle(notice.Kind)</span><strong>@Count(notice.Count)</strong><div class="progress-track" aria-hidden="true"><span class="@(notice.Severity == NoticeSeverity.Critical ? "critical" : "attention")" data-metric-bar style="@($"width:{Invariant(Ratio(notice.Count, snapshot.Notices.Max(n => n.Count)))}%")"></span></div></summary><p>@(notice.Severity == NoticeSeverity.Critical ? "Crítico" : "Atención") · @Count(notice.Count) productos. Las barras comparan cantidades; los problemas pueden coincidir en un mismo producto.</p></details></li>
+                        }
+                    </ul>
+                    <p class="hint">Un producto puede tener más de un aviso.</p>
+                }
+            </section>
+        </div>
+        </div>
     }
 </main>
 @code {
     private BusinessMetrics? snapshot;
     private string? error;
     private bool loading, pending, disposed;
+    private bool motionPending;
+    private int revision;
+    private ElementReference page;
+    private IJSObjectReference? motion;
     protected override void OnInitialized() => Data.NoticesChanged += DataChanged;
-    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await Load(); }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { await Load(); return; }
+        if (!motionPending || disposed) return;
+        motionPending = false;
+        try
+        {
+            motion ??= await JS.InvokeAsync<IJSObjectReference>("import", "./metrics-motion.js");
+            if (!disposed) await motion.InvokeVoidAsync("enter", page);
+        }
+        catch (Exception e) when (e is JSException or JSDisconnectedException or InvalidOperationException or OperationCanceledException) { /* Presentation only; final values already render without JS. */ }
+    }
     private void DataChanged() => _ = InvokeAsync(Load);
     private async Task Load()
     {
@@ -87,17 +119,27 @@
         do
         {
             pending = false;
-            try { snapshot = await Metrics.LoadAsync(); error = null; }
+            try { snapshot = await Metrics.LoadAsync(); error = null; revision++; motionPending = true; }
             catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { error = "Los datos guardados se conservaron. Revisá la conexión e intentá nuevamente."; }
         } while (pending && !disposed);
         loading = false;
         if (!disposed) await InvokeAsync(StateHasChanged);
     }
-    public void Dispose() { disposed = true; Data.NoticesChanged -= DataChanged; }
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        Data.NoticesChanged -= DataChanged;
+        if (motion is null) return;
+        try { await motion.InvokeVoidAsync("dispose", page); await motion.DisposeAsync(); }
+        catch (Exception e) when (e is JSException or JSDisconnectedException or InvalidOperationException or OperationCanceledException) { }
+    }
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-AR");
     private static string Count(long value) => value.ToString("N0", Culture);
-    private static string Money(decimal? value) => value is decimal amount ? $"${amount.ToString("N2", Culture)}" : "Sin datos";
-    private static string Percent(decimal? value) => value is decimal amount ? $"{amount.ToString("N2", Culture)}%" : "Sin datos";
-    private static string Coverage(int count, int total, string field) => total == 0 ? "No hay unidades para valorizar." : $"{(count < total ? "Valor parcial · " : "")}{count} de {total} productos con stock tienen {field} registrado.";
-    private static string NoticeTitle(NoticeKind kind) => kind switch { NoticeKind.SellingAtLoss => "Venta por debajo del costo", NoticeKind.OutOfStock => "Sin stock", _ => "Margen crítico" };
+    private static string Percent(decimal value) => value.ToString("N2", Culture) + "%";
+    private static string Invariant(decimal value) => value.ToString("0.################", CultureInfo.InvariantCulture);
+    private static decimal Ratio(int count, int total) => total > 0 ? (decimal)count / total * 100 : 0;
+    private decimal StockPercent => snapshot is null ? 0 : Ratio(snapshot.ProductsInStock, snapshot.ProductCount);
+    private decimal ProfitScale => snapshot is null ? 1 : snapshot.HighestProfit.Concat(snapshot.LowestProfit).Select(p => Math.Abs(p.ProfitPercent)).DefaultIfEmpty(0).Max();
+    private static string Coverage(int count, int total) => total == 0 ? "Sin unidades" : count < total ? $"Valor parcial · {count} / {total} con datos" : $"{count} / {total} con datos";
+    private static string NoticeTitle(NoticeKind kind) => kind switch { NoticeKind.SellingAtLoss => "Venta por debajo del costo", NoticeKind.OutOfStock => "Sin stock", _ => "Ganancia crítica" };
 }

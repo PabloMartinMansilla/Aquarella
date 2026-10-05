@@ -47,7 +47,7 @@ try {
         Check(WebUtility.HtmlDecode(await result.Content.ReadAsStringAsync()).Contains("No se realizó ningún cambio"), "unavailable email does not pretend success");
     }
     await using (var db = new AquarellaDbContext(options)) {
-        Check((await db.Database.GetAppliedMigrationsAsync()).Count() == 2, "existing migrations applied");
+        Check((await db.Database.GetAppliedMigrationsAsync()).Count() == db.Database.GetMigrations().Count(), "existing migrations applied");
         Check(!await db.Users.AnyAsync() && !await db.AccountTokens.AnyAsync(), "clean Production; no local user/tokens copied");
         // Fixture belongs ONLY to this new temporary database, never to real Production/Development.
         var user = new User { Username = "hosting-verification", Email = "hosting@example.test", NormalizedEmail = "HOSTING@EXAMPLE.TEST", EmailVerified = true };
@@ -79,7 +79,7 @@ try {
     Check(keyFiles.All(File.Exists), "Data Protection keys preserved");
     await using (var db = new AquarellaDbContext(options)) {
         Check(await db.Products.AnyAsync(p => p.Name == "Persisted fixture" && p.Quantity == 7), "SQLite data survives process restart");
-        Check((await db.Database.GetAppliedMigrationsAsync()).Count() == 2, "restart does not re-create schema");
+        Check((await db.Database.GetAppliedMigrationsAsync()).Count() == db.Database.GetMigrations().Count(), "restart does not re-create schema");
     }
     html = await (await Send("GET", "/mi-cuenta")).Content.ReadAsStringAsync();
     Check((await Send("POST", "/mi-cuenta?handler=Logout", new() { ["__RequestVerificationToken"] = Token(html) })).StatusCode == HttpStatusCode.Redirect, "logout");

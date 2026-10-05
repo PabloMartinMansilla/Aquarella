@@ -21,7 +21,7 @@ await using (var db = factory.CreateDbContext())
 {
     Check(!db.Database.HasPendingModelChanges(), "Migration snapshot matches model");
     var assembly = db.GetService<IMigrationsAssembly>();
-    var migration = assembly.CreateMigration(assembly.Migrations.Values.Last(), db.Database.ProviderName!);
+    var migration = assembly.CreateMigration(assembly.Migrations["20261005000444_UserAiSettings"], db.Database.ProviderName!);
     Check(migration.UpOperations.Count == 1 && migration.UpOperations[0] is AddColumnOperation { Name: "AiSettingsJson", Table: "Users", IsNullable: true }, "Exactly one nullable column added");
     await db.GetService<IMigrator>().MigrateAsync("20261004211838_RealAccounts");
     var now = DateTime.UtcNow;

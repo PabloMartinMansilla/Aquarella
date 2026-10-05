@@ -1,0 +1,21 @@
+@using System.Globalization
+<article class="metric-card" data-metric-surface>
+    <div class="metric-heading"><h2>@Title</h2><details class="metric-help"><summary aria-label="Información sobre @Title" aria-describedby="@helpId">i</summary><p id="@helpId">@Help</p></details></div>
+    <strong class="metric-value" aria-label="@FinalText"><span aria-hidden="true" data-metric-counter data-value="@Value?.ToString(CultureInfo.InvariantCulture)" data-format="@Format" data-final="@FinalText">@FinalText</span></strong>
+    @if (!string.IsNullOrEmpty(Note)) { <span class="metric-note">@Note</span> }
+    @if (Href is not null) { <a class="metric-link" href="@Href">@LinkText <span aria-hidden="true">↗</span></a> }
+</article>
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public decimal? Value { get; set; }
+    [Parameter] public string Format { get; set; } = "count";
+    [Parameter] public string Help { get; set; } = "";
+    [Parameter] public string? Note { get; set; }
+    [Parameter] public string? Href { get; set; }
+    [Parameter] public string? LinkText { get; set; }
+    private readonly string helpId = "metric-help-" + Guid.NewGuid().ToString("N");
+    private string FinalText => Value is decimal value ? Format switch {
+        "money" => "$" + value.ToString("N2", Culture), "percent" => value.ToString("N2", Culture) + "%", _ => value.ToString("N0", Culture)
+    } : "Sin datos";
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-AR");
+}

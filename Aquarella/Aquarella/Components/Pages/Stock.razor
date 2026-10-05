@@ -1,23 +1,29 @@
 @page "/stock"
 @rendermode InteractiveServer
 @using Aquarella.Models
+@using System.ComponentModel.DataAnnotations
 
 @inject Aquarella.Services.BusinessData Data
 
 <PageTitle>Stock · Aquarella</PageTitle>
 <main class="module-page stock-page">
     <BackToDashboard />
-    <div class="stock-heading"><h1>Stock</h1><button class="primary-button" disabled="@(!ready || busy)" @onclick="NewProduct">+ Agregar producto</button></div>
+    <div class="stock-heading"><h1>Stock</h1><div class="stock-actions"><button class="primary-button" disabled="@(!ready || busy)" @onclick="NewProduct">+ Agregar producto</button><button class="quiet-button" disabled="@(!ready || busy)" @onclick="OpenInvoice">Cargar factura</button></div></div>
+    @if (invoiceOpen)
+    {
+        <StockInvoiceImport Products="products" Saved="ReloadProducts" Closed="() => invoiceOpen = false" BusyChanged="value => busy = value" />
+    }
     @if (editing)
     {
-        <form class="product-form" @onsubmit="SaveProduct" @onsubmit:preventDefault>
+        <section class="product-form"><EditForm EditContext="editContext" @key="editContext" OnValidSubmit="SaveProduct" OnInvalidSubmit="InvalidProduct">
+            <DataAnnotationsValidator />
             <h2>@(editId is null ? "Agregar producto" : "Editar producto")</h2>
             <div class="form-fields">
-                <label>Nombre del producto<input @bind="name" @bind:event="oninput" maxlength="120" required /></label>
-                <label>@(editId is null ? "Cantidad inicial" : "Cantidad actual")<input type="number" min="0" max="2147483647" @bind="quantity" @bind:event="oninput" required /></label>
+                <div><label for="stock-product-name">Nombre del producto</label><StockTextInput id="stock-product-name" @ref="nameInput" @bind-Value="form.Name" maxlength="120" disabled="@busy" /><ValidationMessage For="() => form.Name" /></div>
+                <div><label for="stock-product-quantity">@(editId is null ? "Cantidad a agregar" : "Cantidad actual")</label><StockNumberInput id="stock-product-quantity" @bind-Value="form.Quantity" min="0" max="2147483647" disabled="@busy" ParsingErrorMessage="Ingresá una cantidad entera válida." /><ValidationMessage For="() => form.Quantity" /></div>
             </div>
-            <div class="form-actions"><button class="primary-button" aria-busy="@busy" disabled="@busy" type="submit">Guardar producto</button><button class="quiet-button" disabled="@busy" type="button" @onclick="() => editing = false">Cancelar</button></div>
-        </form>
+            <div class="form-actions"><button class="primary-button" aria-busy="@busy" disabled="@busy" type="submit">@(editId is null ? "Agregar producto" : "Guardar cambios")</button><button class="quiet-button" disabled="@busy" type="button" @onclick="() => editing = false">@(editId is null ? "Cerrar" : "Cancelar")</button></div>
+        </EditForm></section>
     }
     <p class="status" data-feedback role="status" aria-live="polite">@status</p>
     <section class="product-list" aria-label="Productos">
@@ -54,14 +60,17 @@
     private List<StockProduct> products = [];
     private readonly Dictionary<Guid, int> adjustments = [];
 
-    private bool ready, busy, editing, loadFailed;
+    private bool ready, busy, editing, loadFailed, invoiceOpen, focusName;
     private Guid? editId, deleteId;
-    private string name = "";
-    private int quantity;
+    private ProductForm form = new();
+    private EditContext editContext = null!;
+    private StockTextInput? nameInput;
+    private string operationKey = Guid.NewGuid().ToString("N");
     private string? status;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (focusName && nameInput is not null) { focusName = false; await nameInput.InputElement.FocusAsync(); }
         if (!firstRender) return;
         try
         {
@@ -72,8 +81,11 @@
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { loadFailed = true; status = "No se pudo acceder a los productos guardados. No se sobrescribieron los datos."; }
         StateHasChanged();
     }
-    private void NewProduct() { editId = null; name = ""; quantity = 0; editing = true; status = null; }
-    private void Edit(StockProduct product) { editId = product.Id; name = product.Name; quantity = product.Quantity; editing = true; status = null; }
+    private void ResetForm(string name = "", int? quantity = null) { form = new() { Name = name, Quantity = quantity }; editContext = new(form); editContext.OnFieldChanged += (_, _) => status = null; focusName = true; }
+    private void NewProduct() { editId = null; ResetForm(); editing = true; invoiceOpen = false; status = null; operationKey = Guid.NewGuid().ToString("N"); }
+    private void OpenInvoice() { editing = false; invoiceOpen = true; status = null; }
+    private void Edit(StockProduct product) { editId = product.Id; ResetForm(product.Name, product.Quantity); editing = true; invoiceOpen = false; status = null; }
+    private async Task ReloadProducts() { products = await Data.LoadProductsAsync(); foreach (var product in products) adjustments.TryAdd(product.Id, 0); }
     private void Step(Guid id, int step)
     {
         var value = (long)adjustments[id] + step;
@@ -81,11 +93,22 @@
     }
     private async Task SaveProduct()
     {
-        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120 || quantity < 0) { status = "Ingresá un nombre y una cantidad válida, sin valores negativos."; return; }
-        var product = new StockProduct(editId ?? Guid.NewGuid(), name.Trim(), quantity);
-
-        if (await Persist(() => Data.SaveProductAsync(product, editId is null))) { adjustments[product.Id] = 0; editing = false; status = "Producto guardado."; }
+        if (busy || !ready) return;
+        if (editId is Guid id)
+        {
+            if (await Persist(() => Data.SaveProductAsync(new(id, form.Name.Trim(), form.Quantity!.Value), false)))
+            { adjustments[id] = 0; editing = false; status = "Producto guardado."; }
+            return;
+        }
+        StockIntakeOutcome? outcome = null;
+        if (await Persist(async () => outcome = await Data.ApplyStockIntakeAsync([new(form.Name, form.Quantity!.Value)], operationKey)))
+        {
+            var result = outcome!.Lines.Single();
+            status = outcome.AlreadyApplied ? "Esta carga ya estaba guardada; no se duplicó." : result.Created ? $"Producto agregado: {result.Name}." : $"Producto actualizado: +{result.AddedQuantity} unidades. Stock actual: {result.FinalQuantity}.";
+            ResetForm(); operationKey = Guid.NewGuid().ToString("N");
+        }
     }
+    private void InvalidProduct() => status = "Revisá los campos marcados antes de guardar el producto.";
     private async Task Confirm(StockProduct product)
     {
         var result = (long)product.Quantity + adjustments[product.Id];
@@ -102,9 +125,18 @@
     {
         if (busy || !ready) return false;
         busy = true;
-        try { await operation(); products = await Data.LoadProductsAsync(); return true; }
-        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá la conexión o permisos de la base de datos; los datos anteriores se conservaron."; return false; }
+        try { await operation(); await ReloadProducts(); return true; }
+        catch (ValidationException e) { status = e.Message; return false; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo completar el guardado o actualizar la lista. Revisá la conexión o permisos de la base de datos. Si estabas agregando un producto, podés reintentar la misma carga sin duplicarla."; return false; }
         finally { busy = false; }
+    }
+
+    private sealed class ProductForm
+    {
+        [Required(ErrorMessage = "Ingresá el nombre del producto."), StringLength(120, ErrorMessage = "El nombre admite hasta 120 caracteres.")]
+        public string Name { get; set; } = "";
+        [Required(ErrorMessage = "Ingresá la cantidad."), Range(0, int.MaxValue, ErrorMessage = "La cantidad debe estar entre 0 y 2.147.483.647.")]
+        public int? Quantity { get; set; }
     }
 
 }

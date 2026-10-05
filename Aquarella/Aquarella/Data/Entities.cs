@@ -54,6 +54,15 @@ public sealed class Product
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
+// Confirmation receipt, not a copy of the invoice or its sensitive contents.
+public sealed class StockIntakeReceipt
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid BusinessId { get; set; }
+    public string OperationKey { get; set; } = "";
+    public string ResultsJson { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
 public sealed class CalendarEntry
 {
     public Guid Id { get; set; } = Guid.NewGuid();

@@ -70,7 +70,9 @@ export function start(userId, force = false, completed = false, callback) {
             button(index === steps.length - 1 ? 'Finalizar' : 'Siguiente', () => { if (index === steps.length - 1) { final = true; render(); } else { index++; show(); } }, true);
             button('Saltar tutorial', () => { confirming = true; render(); });
         }
-        position(); card.querySelector('button')?.focus({ preventScroll: true });
+        position();
+        window.aquarellaVisualFeedback?.animate(card, [{ opacity: .8, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }]);
+        card.querySelector('button')?.focus({ preventScroll: true });
     };
     const show = () => {
         const target = document.getElementById(steps[index].id);
@@ -88,6 +90,6 @@ export function start(userId, force = false, completed = false, callback) {
     };
     const observer = new ResizeObserver(update); observer.observe(card);
     window.addEventListener('resize', update); window.addEventListener('scroll', update, true); layer.addEventListener('keydown', keyboard);
-    active = { dispose() { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); layer.remove(); if (shell) shell.inert = oldInert; if (oldFocus?.isConnected) oldFocus.focus({ preventScroll: true }); } };
+    active = { dispose() { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', update); window.removeEventListener('scroll', update, true); window.aquarellaVisualFeedback?.exitSurface(layer, layer.getBoundingClientRect()); layer.remove(); if (shell) shell.inert = oldInert; if (oldFocus?.isConnected) oldFocus.focus({ preventScroll: true }); } };
     show();
 }

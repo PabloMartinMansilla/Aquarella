@@ -3,6 +3,7 @@ using System;
 using Aquarella.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,10 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Aquarella.Data.Migrations
 {
     [DbContext(typeof(AquarellaDbContext))]
-    partial class AquarellaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261005180000_StockIntakeReceipts")]
+    partial class StockIntakeReceipts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");

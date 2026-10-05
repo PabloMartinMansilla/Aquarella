@@ -3,10 +3,22 @@
 <ul class="product-metrics">
     @foreach (var product in Products)
     {
-        <li @key="product.Id"><strong>@product.Name</strong><span class="percentage">@product.ProfitPercent.ToString("N2", Culture)%</span><span class="detail">Costo $@product.Cost.ToString("N2", Culture) · Venta $@product.SalePrice.ToString("N2", Culture)</span><span class="detail">Ganancia por unidad: $@product.Profit.ToString("N2", Culture)</span></li>
+        var negative = product.ProfitPercent < 0;
+        var width = Math.Abs(product.ProfitPercent) / (Scale > 0 ? Scale : 1) * 50;
+        <li @key="product.Id">
+            <details class="product-detail">
+                <summary aria-describedby="@(tooltipPrefix + product.Id)">
+                    <span class="product-name">@product.Name</span><strong class="percentage">@product.ProfitPercent.ToString("N2", Culture)%</strong>
+                    <span class="signed-track" aria-hidden="true"><span class="zero-axis"></span><span class="profit-bar @(negative ? "negative" : "positive")" data-metric-bar style="@($"width:{width.ToString("0.################", CultureInfo.InvariantCulture)}%")"></span></span>
+                </summary>
+                <div class="product-tooltip" id="@(tooltipPrefix + product.Id)"><span>Costo <strong>$@product.Cost.ToString("N2", Culture)</strong></span><span>Venta <strong>$@product.SalePrice.ToString("N2", Culture)</strong></span><span>@(negative ? "Pérdida" : "Ganancia") por unidad <strong>$@product.Profit.ToString("N2", Culture)</strong></span><a href="/precios">Ver en Precios ↗</a></div>
+            </details>
+        </li>
     }
 </ul>
 @code {
     [Parameter, EditorRequired] public IReadOnlyList<ProductProfitMetric> Products { get; set; } = [];
+    [Parameter] public decimal Scale { get; set; } = 1;
+    private readonly string tooltipPrefix = "metric-product-" + Guid.NewGuid().ToString("N") + "-";
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-AR");
 }

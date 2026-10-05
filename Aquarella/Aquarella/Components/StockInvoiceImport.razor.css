@@ -1,0 +1,19 @@
+.invoice-panel { border: 1px solid var(--border); background: var(--surface); color: var(--surface-text); border-radius: 18px; padding: 24px; margin-bottom: 20px; }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+h2 { margin: 0; font-size: 17px; font-weight: 600; }
+.hint, .status, .file-name { font-size: 13px; line-height: 1.6; color: var(--surface-muted); overflow-wrap: anywhere; }
+.file-actions, .form-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.file-actions label { flex: 1 1 220px; min-width: 0; }
+label { display: block; font-size: 13px; min-width: 0; }
+.invoice-panel ::deep input, select { display: block; width: 100%; min-width: 0; margin-top: 8px; padding: 10px; box-sizing: border-box; font: inherit; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--surface-text); }
+button { font: inherit; cursor: pointer; padding: 10px 16px; border-radius: 10px; min-height: 44px; }
+.primary-button { background: var(--secondary); color: var(--on-secondary); border: 0; font-weight: 600; }
+.quiet-button { border: 0; background: transparent; color: var(--surface-muted); font-size: 13px; }
+button:disabled { opacity: .5; cursor: default; }
+.review-list { display: grid; gap: 16px; }
+.review-row { border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-width: 0; }
+.row-fields { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; }
+.row-association { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.row-association label { flex: 1 1 220px; }
+.proposal { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 13px; margin-bottom: 0; color: var(--heading); }
+@media (max-width: 600px) { .invoice-panel { padding: 18px; } .row-fields { grid-template-columns: 1fr; } .form-actions .primary-button { width: 100%; } }
