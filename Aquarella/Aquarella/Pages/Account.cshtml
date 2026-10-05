@@ -1,0 +1,8 @@
+@page "/mi-cuenta"
+@model Aquarella.Pages.AccountModel
+@{ ViewData["Title"] = "Mi cuenta"; }
+<h1>Mi cuenta</h1><p class="account-muted">Tus datos personales. El perfil del negocio se administra por separado.</p>
+<dl class="account-details"><dt>Nombre</dt><dd>@Model.Person.FirstName</dd><dt>Apellido</dt><dd>@Model.Person.LastName</dd><dt>Email</dt><dd>@Model.Person.Email</dd><dt>Estado del email</dt><dd>@(Model.Person.EmailVerified ? "Verificado" : "No verificado")</dd></dl>
+@if(Model.Message is not null){<p role="status">@Model.Message</p>}
+@if(Model.Development){<p class="account-muted">Los enlaces de desarrollo se guardan en App_Data/development-emails.</p>}
+<div class="account-actions"><form method="post" asp-page-handler="Password"><button class="account-primary" type="submit">Cambiar contraseña</button></form><form method="post" asp-page-handler="Logout"><button class="account-primary" type="submit">Cerrar sesión</button></form><a href="/">Volver al dashboard</a></div>

@@ -1,0 +1,24 @@
+# Send only the application source as build context.
+**
+!Dockerfile
+!Aquarella/
+!Aquarella/Aquarella/
+!Aquarella/Aquarella/**
+**/.git
+**/.vs
+**/bin
+**/obj
+**/App_Data
+**/*.db
+**/*.db-*
+**/.env
+**/.env.*
+**/*.csproj.user
+**/*.pfx
+**/*.pem
+**/*.key
+**/data-protection-keys
+**/production-data
+**/appsettings.Development.json
+**/Properties/launchSettings.json
+**/tools

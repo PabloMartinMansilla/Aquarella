@@ -10,4 +10,5 @@ public sealed class ProductPrice
     public decimal SuggestedPrice => decimal.Round(Cost * (1 + DesiredProfitPercent / 100), 2, MidpointRounding.AwayFromZero);
     public decimal EffectiveSalePrice => ManualSalePrice ? SalePrice : SuggestedPrice;
     public decimal RealProfit => EffectiveSalePrice - Cost;
+    public decimal? ProfitPercentOverCost => Cost > 0 ? RealProfit / Cost * 100 : null;
 }

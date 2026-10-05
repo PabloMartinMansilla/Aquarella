@@ -1,3 +1,4 @@
+// Legacy read-only adapter, used only by the one-time database import.
 const key = 'aquarella.stock.v1';
 export function load() {
     const value = localStorage.getItem(key);
@@ -9,5 +10,5 @@ export function load() {
     }
     return products;
 }
-export function save(products) { localStorage.setItem(key, JSON.stringify(products)); window.dispatchEvent(new Event("aquarella-stock-changed")); }
+
 

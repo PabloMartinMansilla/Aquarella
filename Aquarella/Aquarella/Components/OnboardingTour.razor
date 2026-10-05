@@ -1,19 +1,23 @@
 @inject IJSRuntime JS
-@inject Aquarella.Services.LocalSessionStore Session
+@inject Aquarella.Services.Accounts.AccountSession Session
 @implements IAsyncDisposable
 
 @code {
     private IJSObjectReference? module;
+    private DotNetObjectReference<OnboardingTour>? callback;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || !Session.IsSignedIn) return;
         try {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./onboarding.js");
-            await module.InvokeVoidAsync("start", Session.UserId, Session.ConsumeTutorialRequest());
+            callback = DotNetObjectReference.Create(this);
+            await module.InvokeVoidAsync("start", Session.UserId, Session.ConsumeTutorialRequest(), await Session.CompletedTutorialAsync(), callback);
         } catch (JSException) { /* Storage unavailable: never block the dashboard. */ }
     }
+    [JSInvokable] public Task CompleteTutorial() => Session.CompleteTutorialAsync();
     public async ValueTask DisposeAsync()
     {
-        if (module is not null) { try { await module.InvokeVoidAsync("stop"); await module.DisposeAsync(); } catch (JSDisconnectedException) { } }
+        if (module is not null) { try { await module.InvokeVoidAsync("stop"); await module.DisposeAsync(); } catch (Exception e) when (e is JSException or JSDisconnectedException or OperationCanceledException or ObjectDisposedException) { /* Navigation or circuit shutdown already released the browser reference. */ } }
+        callback?.Dispose();
     }
 }

@@ -2,3 +2,16 @@
 bin/
 obj/
 *.csproj.user
+# Local database and SQLite journals contain business data.
+App_Data/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+.env
+.env.*
+data-protection-keys/
+production-data/
+*.pfx
+*.pem
+*.key

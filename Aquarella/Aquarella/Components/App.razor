@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Aquarella.styles.css"]" />
     <link rel="stylesheet" href="@Assets["onboarding.css"]" />
+    <link rel="stylesheet" href="@Assets["design-system.css"]" />
     <ImportMap />
     <HeadOutlet @rendermode="InteractiveServer" />
 </head>
@@ -20,6 +21,8 @@
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script type="module" src="@Assets["business-identity-navigation.js"]"></script>
     <script type="module" src="@Assets["scroll-reveal.js"]"></script>
+    <script src="@Assets["visual-feedback.js"]" defer></script>
+    <script>window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });</script>
 </body>
 
 </html>

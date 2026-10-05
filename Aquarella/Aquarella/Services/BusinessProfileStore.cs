@@ -28,7 +28,7 @@ public sealed class BusinessProfileStore(IBusinessProfilePersistence persistence
         Changed?.Invoke();
     }
 
-    private static bool IsValid(BusinessProfile profile) =>
+    internal static bool IsValid(BusinessProfile profile) =>
         Validator.TryValidateObject(profile, new ValidationContext(profile), null, true)
         && !string.IsNullOrWhiteSpace(profile.Name)
         && !string.IsNullOrWhiteSpace(profile.PrimaryColor)
@@ -37,3 +37,4 @@ public sealed class BusinessProfileStore(IBusinessProfilePersistence persistence
         && (profile.LogoDataUrl is null || (profile.LogoDataUrl.StartsWith("data:image/png;base64,", StringComparison.Ordinal)
             && profile.LogoDataUrl.Length <= 3_000_000));
 }
+

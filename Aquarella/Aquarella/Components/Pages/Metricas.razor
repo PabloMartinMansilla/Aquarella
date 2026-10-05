@@ -1,11 +1,103 @@
 @page "/metricas"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Aquarella.Models
+@using System.Globalization
+@inject Aquarella.Services.MetricsService Metrics
+@inject Aquarella.Services.BusinessData Data
 
 <PageTitle>Métricas · Aquarella</PageTitle>
 
-<main class="module-page">
+<main class="module-page metrics-page">
     <BackToDashboard Prominent="true" />
     <h1>Métricas</h1>
-    <ComingSoon />
+    <div class="intro-row"><p class="intro">Una mirada a tu inventario y precios actuales.</p><button class="refresh-button" @onclick="Load" disabled="@loading" aria-busy="@loading">@(loading ? "Actualizando…" : "Actualizar")</button></div>
+    @if (error is not null)
+    {
+        <section class="surface" role="alert"><h2>No pudimos actualizar las métricas</h2><p>@error</p><button class="refresh-button" @onclick="Load">Volver a intentar</button></section>
+    }
+    else if (snapshot is null) { <p role="status">Cargando métricas…</p> }
+    else if (snapshot.ProductCount == 0)
+    {
+        <section class="surface"><h2>Todavía no hay productos para analizar</h2><p>Agregá productos en Stock y configurá sus costos y precios para conocer el valor de tu inventario.</p><a class="action-link" href="/stock">Ir a Stock <span aria-hidden="true">↗</span></a></section>
+    }
+    else
+    {
+        <p class="scope-note">Estado actual · Los valores potenciales no representan ventas, ingresos ni ganancias realizadas.</p>
+        <section class="kpi-grid" aria-label="Resumen del inventario">
+            <article class="kpi"><h2>Productos</h2><strong>@Count(snapshot.ProductCount)</strong><p>Productos registrados en Stock.</p></article>
+            <article class="kpi"><h2>Unidades disponibles</h2><strong>@Count(snapshot.Units)</strong><p>Suma de las cantidades actuales.</p></article>
+            <article class="kpi"><h2>Sin stock</h2><strong>@Count(snapshot.OutOfStock)</strong><p>Productos sin unidades disponibles.</p><a href="/stock">Revisar Stock</a></article>
+            <article class="kpi"><h2>Inventario a costo</h2><strong>@Money(snapshot.InventoryCost)</strong><p>@Coverage(snapshot.ProductsWithCost, snapshot.ProductsInStock, "costo")</p></article>
+            <article class="kpi"><h2>Valor potencial de venta</h2><strong>@Money(snapshot.InventorySaleValue)</strong><p>@Coverage(snapshot.ProductsWithSalePrice, snapshot.ProductsInStock, "precio")</p></article>
+        </section>
+        <section class="surface" aria-labelledby="profit-summary">
+            <h2 id="profit-summary">Ganancia potencial sobre el costo</h2>
+            <strong class="profit-value">@Percent(snapshot.WeightedProfitPercent)</strong>
+            <p>Ponderada por el valor del stock con costo registrado. Se calcula como (valor de venta − valor a costo) ÷ valor a costo × 100, usando los mismos productos en ambos valores.</p>
+            <p class="hint">@snapshot.ProductsWithCost de @snapshot.ProductsInStock productos con stock incluidos. Los costos cero quedan fuera porque Aquarella todavía no distingue un costo pendiente de una adquisición gratuita.</p>
+            @if (snapshot.WeightedProfitPercent is null) { <p class="hint">Necesitás unidades con costo registrado para calcular este porcentaje.</p> }
+            <a class="action-link" href="/precios">Revisar costos y precios <span aria-hidden="true">↗</span></a>
+        </section>
+        <section class="surface" aria-labelledby="profit-products">
+            <h2 id="profit-products">Ganancia estimada por producto</h2>
+            <p class="hint">@snapshot.ProductsWithProfit de @snapshot.ProductCount productos tienen costo para calcular su ganancia. El porcentaje se expresa sobre el costo, igual que en Precios. Incluye productos que hoy no tienen stock.</p>
+            @if (snapshot.ProductsWithProfit == 0)
+            {
+                <p>Todavía no hay costos suficientes para comparar productos.</p>
+            }
+            else
+            {
+                <div class="ranking-grid">
+                    <div><h3>Menor ganancia sobre el costo</h3><MetricProductList Products="snapshot.LowestProfit" /></div>
+                    <div><h3>Mayor ganancia sobre el costo</h3><MetricProductList Products="snapshot.HighestProfit" /></div>
+                </div>
+                <p class="hint">Hasta cinco productos por lista. La ganancia por unidad es precio efectivo de venta menos costo.</p>
+            }
+            <a class="action-link" href="/precios">Analizar en Precios <span aria-hidden="true">↗</span></a>
+        </section>
+        <section class="surface" aria-labelledby="active-problems">
+            <h2 id="active-problems">Problemas activos</h2>
+            @if (snapshot.ActiveNotices == 0) { <p>No hay avisos que requieran tu atención.</p> }
+            else
+            {
+                <p>@snapshot.ActiveNotices avisos activos · @snapshot.Notices.Where(n => n.Severity == NoticeSeverity.Critical).Sum(n => n.Count) críticos · @snapshot.Notices.Where(n => n.Severity == NoticeSeverity.Attention).Sum(n => n.Count) de atención.</p>
+                <ul class="cause-list">
+                    @foreach (var notice in snapshot.Notices) { <li><span>@NoticeTitle(notice.Kind)</span><strong>@notice.Count</strong></li> }
+                </ul>
+                <p class="hint">Un producto puede tener un problema de stock y otro de precio.</p>
+            }
+            <a class="action-link" href="/avisos">Revisar Avisos <span aria-hidden="true">↗</span></a>
+        </section>
+        <p class="scope-note">Aquarella aún no registra ventas ni historial de movimientos de stock o precios. Estas métricas describen el estado actual; no muestran tendencias.</p>
+    }
 </main>
-
-
+@code {
+    private BusinessMetrics? snapshot;
+    private string? error;
+    private bool loading, pending, disposed;
+    protected override void OnInitialized() => Data.NoticesChanged += DataChanged;
+    protected override async Task OnAfterRenderAsync(bool firstRender) { if (firstRender) await Load(); }
+    private void DataChanged() => _ = InvokeAsync(Load);
+    private async Task Load()
+    {
+        if (disposed) return;
+        if (loading) { pending = true; return; }
+        loading = true;
+        do
+        {
+            pending = false;
+            try { snapshot = await Metrics.LoadAsync(); error = null; }
+            catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { error = "Los datos guardados se conservaron. Revisá la conexión e intentá nuevamente."; }
+        } while (pending && !disposed);
+        loading = false;
+        if (!disposed) await InvokeAsync(StateHasChanged);
+    }
+    public void Dispose() { disposed = true; Data.NoticesChanged -= DataChanged; }
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-AR");
+    private static string Count(long value) => value.ToString("N0", Culture);
+    private static string Money(decimal? value) => value is decimal amount ? $"${amount.ToString("N2", Culture)}" : "Sin datos";
+    private static string Percent(decimal? value) => value is decimal amount ? $"{amount.ToString("N2", Culture)}%" : "Sin datos";
+    private static string Coverage(int count, int total, string field) => total == 0 ? "No hay unidades para valorizar." : $"{(count < total ? "Valor parcial · " : "")}{count} de {total} productos con stock tienen {field} registrado.";
+    private static string NoticeTitle(NoticeKind kind) => kind switch { NoticeKind.SellingAtLoss => "Venta por debajo del costo", NoticeKind.OutOfStock => "Sin stock", _ => "Margen crítico" };
+}

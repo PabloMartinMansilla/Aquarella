@@ -1,18 +1,21 @@
 export const steps = [
     { id: 'tour-menu', title: 'Menú principal', text: 'Desde acá podés acceder rápidamente a las distintas secciones de Aquarella.' },
-    { id: 'tour-profile', title: 'Tu negocio', text: 'Configurá el nombre, logo, colores y datos principales de tu negocio.' },
+    { id: 'tour-profile', title: 'Tu negocio', text: 'Configurá el nombre, logo y datos principales de tu negocio.' },
     { id: 'tour-search', title: 'Encontrá lo que necesitás', text: 'Buscá rápidamente cualquier sección de Aquarella.' },
     { id: 'tour-panels', title: 'Tus herramientas', text: 'Desde estos paneles accedés a Stock, Precios, Agenda y las demás herramientas.' },
     { id: 'tour-card-stock', title: 'Controlá tu stock', text: 'Registrá tus productos y mantené actualizadas sus cantidades.' },
     { id: 'tour-card-agenda', title: 'Organizá tu negocio', text: 'Usá la agenda para guardar notas, fechas y próximos eventos.' }
 ];
 let active;
+export function readLegacyCompletion() {
+    try { const state = JSON.parse(localStorage.getItem('aquarella.onboarding.v1.pablo') ?? 'null'); return state?.status === 'completed' || state?.status === 'skipped'; }
+    catch { return false; }
+}
 export function stop() { active?.dispose(); active = null; }
-export function start(userId, force = false) {
+export function start(userId, force = false, completed = false, callback) {
     stop();
     if (!userId) return;
-    const key = `aquarella.onboarding.v1.${encodeURIComponent(userId)}`;
-    if (!force && localStorage.getItem(key)) return;
+    if (!force && completed) return;
     const shell = document.querySelector('.app-shell');
     const oldInert = shell?.inert;
     const oldFocus = document.activeElement;
@@ -44,9 +47,10 @@ export function start(userId, force = false) {
             card.style.top = `${Math.max(margin, (vh - card.offsetHeight) / 2)}px`;
         }
     };
-    const persist = result => {
-        try { localStorage.setItem(key, JSON.stringify({ status: result, at: new Date().toISOString() })); stop(); }
-        catch { text('p', 'No se pudo guardar el tutorial. Revisá los permisos del navegador.'); position(); }
+    const persist = async result => {
+        card.querySelectorAll('button').forEach(b => b.disabled = true);
+        try { await callback.invokeMethodAsync('CompleteTutorial'); stop(); }
+        catch { card.querySelectorAll('button').forEach(b => b.disabled = false); text('p', 'No se pudo guardar el tutorial. Volvé a intentar.'); position(); }
     };
     const render = () => {
         card.replaceChildren();

@@ -1,11 +1,74 @@
 @page "/avisos"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Aquarella.Models
+@using System.Globalization
+@inject Aquarella.Services.NoticesStore Notices
 
 <PageTitle>Avisos · Aquarella</PageTitle>
 
-<main class="module-page">
+<main class="module-page notices-page">
     <BackToDashboard Prominent="true" />
     <h1>Avisos</h1>
-    <ComingSoon />
+    <p class="intro">Problemas actuales de tu negocio que requieren atención.</p>
+    @if (Notices.Error is not null)
+    {
+        <div class="empty-state" role="status"><p>@Notices.Error</p><button class="primary-button" @onclick="Retry">Intentar nuevamente</button></div>
+    }
+    else if (!Notices.Ready) { <p role="status">Revisando stock y precios…</p> }
+    else if (Notices.Items.Count == 0)
+    {
+        <section class="empty-state" aria-labelledby="all-clear"><span class="clear-icon" aria-hidden="true">✓</span><h2 id="all-clear">Todo en orden</h2><p>No hay avisos que requieran tu atención.</p></section>
+    }
+    else
+    {
+        <p class="notice-count" role="status">@Notices.Items.Count problemas activos · @Notices.Items.Select(n => n.ProductId).Distinct().Count() productos afectados</p>
+        @foreach (var group in Notices.Items.GroupBy(n => n.Kind))
+        {
+            var items = group.ToArray();
+            <section class="notice-group" @key="group.Key" aria-labelledby="@($"notice-{group.Key}")">
+                <div class="notice-heading"><span class="severity"><span aria-hidden="true">!</span> Crítico</span><span class="group-count">@items.Length @(items.Length == 1 ? "producto" : "productos")</span></div>
+                <h2 id="@($"notice-{group.Key}")">@Title(group.Key)</h2>
+                <p class="group-description">@Description(group.Key)</p>
+                <details open="@(items.Length <= 3)">
+                    <summary>Ver productos afectados (@items.Length)</summary>
+                    <ul>
+                        @foreach (var notice in items)
+                        {
+                            <li @key="notice.ProductId"><strong>@notice.ProductName</strong><span>@Detail(notice)</span></li>
+                        }
+                    </ul>
+                </details>
+                <a class="notice-action" href="@(group.Key == NoticeKind.OutOfStock ? "/stock" : "/precios")">@(group.Key == NoticeKind.OutOfStock ? "Revisar Stock" : "Revisar precios") <span aria-hidden="true">↗</span></a>
+            </section>
+        }
+    }
 </main>
 
+@code {
+    protected override void OnInitialized() => Notices.Changed += Changed;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) { await Notices.InitializeAsync(); await InvokeAsync(StateHasChanged); }
+    }
+    private void Changed() => _ = InvokeAsync(StateHasChanged);
+    private Task Retry() => Notices.RefreshAsync();
+    public void Dispose() => Notices.Changed -= Changed;
+    private static string Title(NoticeKind kind) => kind switch {
+        NoticeKind.SellingAtLoss => "Venta por debajo del costo",
+        NoticeKind.OutOfStock => "Sin stock",
+        _ => "Margen crítico"
+    };
+    private static string Description(NoticeKind kind) => kind switch {
+        NoticeKind.SellingAtLoss => "El precio de venta no cubre el costo de estos productos.",
+        NoticeKind.OutOfStock => "Estos productos se quedaron sin unidades disponibles.",
+        _ => "La ganancia sobre el costo es de 1% o menos. Revisá el precio de venta."
+    };
+    private static string Detail(BusinessNotice notice) => notice.Kind switch {
+        NoticeKind.SellingAtLoss => $"Costo ${Money(notice.Cost)} · Venta ${Money(notice.SalePrice)}",
+        NoticeKind.OutOfStock => "Sin unidades disponibles.",
+        _ => $"{notice.ProfitPercent?.ToString("N2", CultureInfo.GetCultureInfo("es-AR"))}% de ganancia sobre el costo."
+    };
+    private static string Money(decimal? value) => value?.ToString("N2", CultureInfo.GetCultureInfo("es-AR")) ?? "—";
+}
 

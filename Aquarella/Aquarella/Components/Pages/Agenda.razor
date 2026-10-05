@@ -16,7 +16,8 @@
         <button disabled="@(month.Year == 9999 && month.Month == 12)" aria-label="Mes siguiente" @onclick="() => MoveMonth(1)">→</button>
         <button class="today-button" @onclick="Today">Hoy</button>
     </div>
-    <p class="status" role="status" aria-live="polite">@status</p>
+    <p class="status" data-feedback role="status" aria-live="polite">@status</p>
+    @if (!ready && string.IsNullOrEmpty(status)) { <p class="storage-note" role="status">Cargando notas…</p> }
     <div class="calendar" aria-label="Calendario mensual">
         @foreach (var label in new[] { "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom" }) { <span class="weekday">@label</span> }
         @for (var blank = 0; blank < Offset; blank++) { <div class="blank-day" aria-hidden="true"></div> }
@@ -42,15 +43,15 @@
                     </article>
                 }
             </div>
-            <p class="note-status @(hasError ? "note-error" : "")" role="status" aria-live="polite">@status</p>
+            <p class="note-status @(hasError ? "note-error" : "")" data-feedback role="status" aria-live="polite">@status</p>
             <form novalidate @onsubmit="Save" @onsubmit:preventDefault>
                 <h3>@(editId is null ? "Nueva nota" : "Editar nota")</h3>
                 <div class="note-fields"><label>Título<input @bind="title" @bind:event="oninput" maxlength="120" /></label><label>Hora (opcional)<input type="time" value="@time" @oninput="e => time = e.Value?.ToString() ?? string.Empty" /></label><label class="content-field">Comentario / descripción<textarea @bind="content" @bind:event="oninput" maxlength="4000" rows="4"></textarea></label></div>
-                <div class="form-actions"><button class="save-button" disabled="@busy" type="submit">Guardar nota</button><button type="button" disabled="@busy" @onclick="Cancel">Cancelar</button></div>
+                <div class="form-actions"><button class="save-button" aria-busy="@busy" disabled="@busy" type="submit">Guardar nota</button><button type="button" disabled="@busy" @onclick="Cancel">Cancelar</button></div>
             </form>
         </section>
     }
-    <p class="storage-note">Las notas se guardan en este navegador y se conservan al recargar.</p>
+    <p class="storage-note">Las notas se guardan en la base de datos y se conservan al recargar.</p>
 </main>
 
 @code {
@@ -78,7 +79,7 @@
             return;
         }
         try { await Store.InitializeAsync(); popover = await JS.InvokeAsync<IJSObjectReference>("import", "./agenda-popover.js"); ready = true; }
-        catch (Exception e) when (e is JSException or System.Text.Json.JsonException) { status = "No se pudieron cargar las notas. Recargá para volver a intentar; los datos guardados se conservaron."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudieron cargar las notas. Recargá para volver a intentar; los datos guardados se conservaron."; }
         StateHasChanged();
     }
     private void MoveMonth(int direction) { month = month.AddMonths(direction); selected = null; Reset(); }
@@ -103,17 +104,19 @@
         busy = true;
         try { await Store.SaveAsync(note); Reset(); hasError = false; status = "Nota guardada."; }
         catch (ArgumentException) { status = "Revisá el título, el contenido o la hora de la nota."; }
-        catch (JSException) { status = "No se pudo guardar. Revisá el espacio o los permisos del navegador; los datos anteriores se conservaron."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá la conexión o permisos de la base de datos; los datos anteriores se conservaron."; }
         finally { busy = false; }
     }
     private async Task Delete(Guid id)
     {
         busy = true;
         try { await Store.DeleteAsync(id); if (editId == id) Reset(); deleteId = null; status = "Nota eliminada."; }
-        catch (JSException) { status = "No se pudo eliminar la nota. Los datos anteriores se conservaron."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo eliminar la nota. Los datos anteriores se conservaron."; }
         finally { busy = false; }
     }
 }
+
+
 
 
 

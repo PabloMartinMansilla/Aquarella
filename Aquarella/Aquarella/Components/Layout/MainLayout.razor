@@ -1,14 +1,15 @@
 @inherits LayoutComponentBase
-@inject Aquarella.Services.LocalSessionStore Session
+@inject Aquarella.Services.Accounts.AccountSession Session
+@inject NavigationManager Navigation
 
 <div class="app-shell">
     @if (Session.IsSignedIn) { <BusinessHeader /> }
-    <div class="page-content">@Body</div>
+    <div class="page-content" @key="Navigation.Uri">@Body</div>
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    Ocurrió un problema. Recargá la página para volver a intentar.
+    <a href="." class="reload">Recargar</a>
+    <button type="button" class="dismiss" aria-label="Cerrar aviso">🗙</button>
 </div>
 

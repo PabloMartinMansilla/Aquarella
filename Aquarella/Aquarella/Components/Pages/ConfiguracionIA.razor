@@ -1,11 +1,89 @@
 @page "/configuracion-ia"
+@rendermode InteractiveServer
+@using Aquarella.Models
+@inject Aquarella.Services.AiSettingsStore SettingsStore
 
 <PageTitle>Configuración de IA · Aquarella</PageTitle>
 
-<main class="module-page">
+<main class="module-page ai-settings">
     <BackToDashboard Prominent="true" />
     <h1>Configuración de IA</h1>
-    <ComingSoon />
+    <p class="intro">Prepará cómo querés que Aquarella te ayude en el futuro.</p>
+    <div class="preparation-note"><strong>La IA todavía no está disponible.</strong><p>Acá solo guardás preferencias de tu cuenta. No se consultan tus datos ni se realizan acciones o llamadas a servicios de IA.</p></div>
+    @if (loadFailed)
+    {
+        <p role="alert">No se pudo cargar tu configuración. Los datos guardados se conservaron.</p>
+        <button class="quiet-button" @onclick="Load">Volver a intentar</button>
+    }
+    <EditForm Model="settings" OnValidSubmit="Save" OnInvalidSubmit="InvalidSave" FormName="ai-settings" novalidate>
+        <DataAnnotationsValidator />
+        <fieldset disabled="@(!ready || saving)">
+            <legend class="sr-only">Preferencias para la futura IA</legend>
+            <details class="settings-section" open>
+                <summary>Personalización <span>Cómo quiero que me responda</span></summary>
+                <div class="section-content">
+                    <div class="field-grid">
+                        <div class="field"><label for="ai-detail">Estilo de respuesta</label><InputSelect id="ai-detail" @bind-Value="settings.AiResponseDetail"><option value="Brief">Breve</option><option value="Balanced">Equilibrado</option><option value="Detailed">Detallado</option></InputSelect><ValidationMessage For="() => settings.AiResponseDetail" /></div>
+                        <div class="field"><label for="ai-tone">Tono</label><InputSelect id="ai-tone" @bind-Value="settings.AiResponseTone"><option value="Direct">Directo</option><option value="Friendly">Amigable</option><option value="Professional">Profesional</option></InputSelect><ValidationMessage For="() => settings.AiResponseTone" /></div>
+                    </div>
+                    <div class="field instructions"><label for="ai-instructions">Instrucciones para la IA</label><p id="instructions-hint" class="hint">Indicá cómo querés que Aquarella te ayude. Es opcional.</p><textarea id="ai-instructions" @bind="settings.AiCustomInstructions" @bind:event="oninput" maxlength="2000" rows="4" aria-describedby="instructions-hint" placeholder="Priorizá reducir desperdicios. Cuando analices precios, explicame primero los productos con menor margen. No uses explicaciones demasiado técnicas."></textarea><ValidationMessage For="() => settings.AiCustomInstructions" /><p class="hint">@(settings.AiCustomInstructions?.Length ?? 0) / 2.000 caracteres. Este texto no se envía a ningún modelo.</p></div>
+                </div>
+            </details>
+            <details class="settings-section">
+                <summary>Información disponible <span>Qué información podrá utilizar</span></summary>
+                <div class="section-content">
+                    <p class="hint">Cada categoría se decide por separado. Estas preferencias no habilitan acceso real todavía.</p>
+                    <label class="toggle-row"><span><strong>Usar información de Stock</strong><small>Productos y cantidades disponibles.</small></span><InputCheckbox role="switch" @bind-Value="settings.AiCanAccessStock" /></label>
+                    <label class="toggle-row"><span><strong>Usar información de Precios</strong><small>Costos, precios y ganancias.</small></span><InputCheckbox role="switch" @bind-Value="settings.AiCanAccessPricing" /></label>
+                    <label class="toggle-row"><span><strong>Usar información de Agenda</strong><small>Notas y actividades de tu agenda.</small></span><InputCheckbox role="switch" @bind-Value="settings.AiCanAccessAgenda" /></label>
+                    <label class="toggle-row"><span><strong>Usar Avisos</strong><small>Problemas activos detectados por Aquarella.</small></span><InputCheckbox role="switch" @bind-Value="settings.AiCanAccessAlerts" /></label>
+                </div>
+            </details>
+            <details class="settings-section">
+                <summary>Comportamiento <span>Qué tipo de ayuda preferís recibir</span></summary>
+                <div class="section-content">
+                    <label class="toggle-row"><span><strong>Sugerencias de la IA</strong><small>Preferencia para recibir sugerencias relevantes cuando la IA esté disponible. No modifica los Avisos actuales.</small></span><InputCheckbox role="switch" @bind-Value="settings.AiProactiveSuggestionsEnabled" /></label>
+                    <div class="field proactivity"><label for="ai-proactivity">Nivel de proactividad</label><InputSelect id="ai-proactivity" @bind-Value="settings.AiProactivityLevel" disabled="@(!settings.AiProactiveSuggestionsEnabled)"><option value="Low">Solo lo importante</option><option value="Balanced">Equilibrado</option><option value="High">Más sugerencias</option></InputSelect><ValidationMessage For="() => settings.AiProactivityLevel" /></div>
+                    <label class="toggle-row"><span><strong>Explicar recomendaciones</strong><small>Preferir recomendaciones acompañadas de sus motivos.</small></span><InputCheckbox role="switch" @bind-Value="settings.AiExplainRecommendations" /></label>
+                </div>
+            </details>
+            <div class="save-bar"><p class="hint">Las preferencias se guardan solo para tu cuenta.</p><button type="submit" class="save-button" aria-busy="@saving">@(saving ? "Guardando…" : "Guardar preferencias")</button></div>
+        </fieldset>
+        <p class="save-status" data-feedback role="status" aria-live="polite">@status</p>
+    </EditForm>
+    <details class="settings-section future-section">
+        <summary>Memoria y capacidades <span class="future-badge">Próximamente</span></summary>
+        <div class="section-content">
+            <div class="future-item"><h2>Memoria personalizada</h2><p>Recordar información útil para personalizar las respuestas.</p></div>
+            <div class="future-item"><h2>Historial de conversaciones</h2><p>Guardar conversaciones con la IA cuando exista esta función.</p></div>
+            <div class="future-item"><h2>Búsqueda en Internet</h2><p>Consultar información actual de Internet cuando sea necesario.</p></div>
+            <div class="future-item"><h2>Acciones de la IA</h2><label for="future-actions">Modo de funcionamiento futuro</label><select id="future-actions" disabled aria-describedby="actions-hint"><option>Solo consultar</option><option>Pedir confirmación</option><option>Acciones permitidas</option></select><p id="actions-hint">Todavía no hay acciones ni autonomía. Las acciones sensibles deberán requerir confirmación, incluso cuando exista automatización.</p></div>
+            <p class="hint">Estas funciones no están habilitadas ni guardan preferencias todavía.</p>
+        </div>
+    </details>
 </main>
-
-
+@code {
+    private AiSettings settings = new();
+    private bool ready, saving, loadFailed;
+    private string? status;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await Load();
+    }
+    private async Task Load()
+    {
+        ready = false; loadFailed = false;
+        try { settings = await SettingsStore.LoadAsync(); ready = true; status = null; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { loadFailed = true; }
+        await InvokeAsync(StateHasChanged);
+    }
+    private async Task Save()
+    {
+        if (!ready || saving) return;
+        saving = true;
+        try { await SettingsStore.SaveAsync(settings); status = "Preferencias de IA guardadas. Se utilizarán cuando la IA esté disponible."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudieron guardar las preferencias. Intentá nuevamente."; }
+        finally { saving = false; }
+    }
+    private void InvalidSave(EditContext context) => status = "Revisá los campos indicados antes de guardar.";
+}

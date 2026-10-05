@@ -6,7 +6,8 @@
     box-sizing: border-box;
     display: none;
     left: 0;
-    padding: 0.6rem 1.25rem 0.7rem 1.25rem;
+    padding: 0.6rem 4.5rem 0.7rem 1.25rem;
+    min-height: 64px;
     position: fixed;
     width: 100%;
     z-index: 1000;
@@ -18,6 +19,7 @@
         right: 0.75rem;
         top: 0.5rem;
     }
+    #blazor-error-ui .reload { display: inline-flex; align-items: center; min-height: 44px; }
 
 .app-shell { margin: 0 auto; padding: 0 24px; }
 @media (max-width: 600px) { .app-shell { padding: 0 16px; } }

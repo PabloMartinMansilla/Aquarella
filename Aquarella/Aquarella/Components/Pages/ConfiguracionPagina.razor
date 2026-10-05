@@ -1,16 +1,74 @@
-@inject Aquarella.Services.LocalSessionStore Session
+@inject Aquarella.Services.Accounts.AccountSession Session
 @inject NavigationManager Navigation
 @page "/configuracion-pagina"
+@rendermode InteractiveServer
+@using Aquarella.Models
+@inject Aquarella.Services.BusinessProfileStore ProfileStore
 
 <PageTitle>Configuración de página · Aquarella</PageTitle>
 
-<main class="module-page">
+<main class="module-page page-settings">
     <BackToDashboard />
     <h1>Configuración de página</h1>
-    <button class="tutorial-button" @onclick="Replay">Ver tutorial nuevamente</button>
+    <p class="intro">Personalizá la apariencia y la experiencia de Aquarella.</p>
+    <section class="profile-section" aria-labelledby="appearance-title">
+        <h2 id="appearance-title">Apariencia</h2>
+        <p class="hint">Personalizá cómo se ve Aquarella.</p>
+        <EditForm Model="appearance" OnValidSubmit="SaveAppearance" OnInvalidSubmit="InvalidSave" FormName="page-appearance" novalidate>
+            <DataAnnotationsValidator />
+            <h3>Personalización de colores</h3>
+            <p class="hint">Al guardar, la paleta se aplica a toda la aplicación.</p>
+            <fieldset disabled="@(!ready || saving)">
+                <legend class="visually-hidden">Paleta de Aquarella</legend>
+                <div class="color-grid">
+                    <div><ColorField Id="primary-color" Label="Color primario" @bind-Value="appearance.PrimaryColor" /><ValidationMessage For="() => appearance.PrimaryColor" /></div>
+                    <div><ColorField Id="secondary-color" Label="Color secundario" @bind-Value="appearance.SecondaryColor" /><ValidationMessage For="() => appearance.SecondaryColor" /></div>
+                    <div><ColorField Id="tertiary-color" Label="Color terciario" @bind-Value="appearance.TertiaryColor" /><ValidationMessage For="() => appearance.TertiaryColor" /></div>
+                </div>
+                <button class="save-button" type="submit" aria-busy="@saving">@(saving ? "Guardando…" : "Guardar colores")</button>
+            </fieldset>
+            <p class="save-status" data-feedback role="status" aria-live="polite">@status</p>
+        </EditForm>
+    </section>
+    <section class="profile-section" aria-labelledby="experience-title">
+        <h2 id="experience-title">Experiencia</h2>
+        <p class="hint">Volvé a recorrer las funciones principales de Aquarella.</p>
+        <button class="tutorial-button" @onclick="Replay">Ver tutorial nuevamente</button>
+    </section>
 </main>
 
 @code {
+    private BusinessProfile appearance = new();
+    private bool ready;
+    private bool saving;
+    private string? status;
+    protected override void OnInitialized() => appearance = ProfileStore.Load();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { await ProfileStore.InitializeAsync(); appearance = ProfileStore.Load(); ready = true; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo cargar la configuración. Volvé a intentar recargando la página."; }
+        StateHasChanged();
+    }
+    private async Task SaveAppearance()
+    {
+        if (!ready || saving) return;
+        saving = true;
+        try
+        {
+            // Reuse the same record and persistence adapter, preserving all business details.
+            var current = ProfileStore.Load();
+            current.PrimaryColor = appearance.PrimaryColor;
+            current.SecondaryColor = appearance.SecondaryColor;
+            current.TertiaryColor = appearance.TertiaryColor;
+            await ProfileStore.SaveAsync(current);
+            appearance = ProfileStore.Load();
+            status = "Colores guardados. La apariencia de Aquarella ya está actualizada.";
+        }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudieron guardar los colores. Revisá la conexión e intentá nuevamente."; }
+        finally { saving = false; }
+    }
+    private void InvalidSave(EditContext context) => status = "Revisá los colores indicados antes de guardar.";
     private void Replay() { Session.RequestTutorial(); Navigation.NavigateTo("/"); }
 }
 

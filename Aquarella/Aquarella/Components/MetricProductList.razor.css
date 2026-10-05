@@ -1,0 +1,6 @@
+.product-metrics { list-style: none; padding: 0; margin: 0; }
+li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-sm); border-top: 1px solid var(--border-soft); padding-block: var(--space-md); font-size: 14px; }
+strong { overflow-wrap: anywhere; font-weight: 600; }
+.percentage { color: var(--heading); font-variant-numeric: tabular-nums; }
+.detail { grid-column: 1 / -1; color: var(--surface-muted); font-size: 13px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { li { grid-template-columns: 1fr; } .percentage { font-size: 16px; } }

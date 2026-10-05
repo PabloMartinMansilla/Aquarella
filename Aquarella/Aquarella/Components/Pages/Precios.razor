@@ -2,20 +2,21 @@
 @rendermode InteractiveServer
 @using Aquarella.Models
 @using System.Globalization
-@implements IAsyncDisposable
-@inject IJSRuntime JS
+@implements IDisposable
+@inject Aquarella.Services.BusinessData Data
 
 <PageTitle>Precios · Aquarella</PageTitle>
 <main class="module-page prices-page">
     <BackToDashboard />
     <h1>Precios</h1>
-    <p class="intro">Productos de Stock. Los cambios se calculan y guardan automáticamente en este navegador.</p>
-    <p class="status" role="status" aria-live="polite">@status</p>
+    <p class="intro">Productos de Stock. Los cambios se calculan y guardan automáticamente.</p>
+    <p class="status" data-feedback role="status" aria-live="polite">@status</p>
     @if (!ready) { <p>@(failed ? "No se pudieron cargar los datos. Recargá para volver a intentar." : "Cargando precios…")</p> }
     else if (products.Count == 0) { <div class="empty-state">Todavía no hay productos. <a href="/stock">Agregalos en Stock</a> para configurar sus precios.</div> }
     else
     {
-        <div class="table-container" tabindex="0" aria-label="Tabla de precios, desplazable horizontalmente">
+        <p class="table-hint" id="prices-scroll-hint">Deslizá la tabla hacia los lados para ver todos los precios.</p>
+        <div class="table-container" tabindex="0" aria-label="Tabla de precios, desplazable horizontalmente" aria-describedby="prices-scroll-hint">
             <table>
                 <thead><tr><th scope="col">Producto</th><th scope="col">Precio de compra</th><th scope="col">% de ganancia deseada</th><th scope="col">Precio sugerido</th><th scope="col">Precio de venta</th><th scope="col">Ganancia real</th></tr></thead>
                 <tbody>
@@ -30,7 +31,7 @@
                             <td><input type="number" min="0" max="1000000000000" step="0.01" value="@Number(price.EffectiveSalePrice)" aria-label="Precio de venta de @product.Name" @oninput="e => Change(price, 2, e)" />
                                 @if (price.ManualSalePrice) { <button class="reset-button" @onclick="() => UseSuggested(price)" aria-label="Usar precio sugerido para @product.Name">Usar sugerido</button> }
                             </td>
-                            <td class="calculated">@Money(price.RealProfit)<small>@(price.Cost == 0 ? "Sin porcentaje: costo cero" : $"{(price.RealProfit / price.Cost * 100).ToString("N2", CultureInfo.GetCultureInfo("es-AR"))}% sobre el costo")</small></td>
+                            <td class="calculated">@Money(price.RealProfit)<small>@(price.ProfitPercentOverCost is not decimal percentage ? "Sin porcentaje: costo cero" : $"{percentage.ToString("N2", CultureInfo.GetCultureInfo("es-AR"))}% sobre el costo")</small></td>
                         </tr>
                     }
                 </tbody>
@@ -43,38 +44,37 @@
 @code {
     private List<StockProduct> products = [];
     private Dictionary<Guid, ProductPrice> prices = [];
-    private IJSObjectReference? storage, watcher;
-    private DotNetObjectReference<Precios>? receiver;
+
+    protected override void OnInitialized() => Data.ProductsChanged += ProductsChanged;
+    private void ProductsChanged() => _ = InvokeAsync(RefreshStock);
     private readonly SemaphoreSlim saveLock = new(1, 1);
     private bool ready, failed;
     private string? status;
     private static string Number(decimal value) => value.ToString(CultureInfo.InvariantCulture);
     private static string Money(decimal value) => value.ToString("N2", CultureInfo.GetCultureInfo("es-AR"));
-    public sealed class StoredPrices { public List<StockProduct> Products { get; set; } = []; public List<ProductPrice> Prices { get; set; } = []; }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
         try {
-            storage = await JS.InvokeAsync<IJSObjectReference>("import", "./prices-storage.js");
+
             await Load();
-            receiver = DotNetObjectReference.Create(this);
-            watcher = await storage.InvokeAsync<IJSObjectReference>("watch", receiver);
+
+
             ready = true;
-        } catch (JSException) { failed = true; status = "No se pudo acceder al almacenamiento. Los datos guardados se conservaron."; }
+        } catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { failed = true; status = "No se pudo acceder al almacenamiento. Los datos guardados se conservaron."; }
         StateHasChanged();
     }
     private async Task Load()
     {
-        var data = await storage!.InvokeAsync<StoredPrices>("load");
-        products = data.Products;
-        prices = data.Prices.ToDictionary(p => p.ProductId);
+        products = await Data.LoadProductsAsync();
+        prices = (await Data.LoadPricesAsync()).ToDictionary(p => p.ProductId);
         foreach (var product in products) prices.TryAdd(product.Id, new ProductPrice { ProductId = product.Id });
     }
-    [JSInvokable] public async Task RefreshStock()
+    public async Task RefreshStock()
     {
         await saveLock.WaitAsync();
         try { await Load(); status = "Lista sincronizada con Stock."; }
-        catch (JSException) { status = "No se pudo sincronizar Stock. Los datos anteriores se conservaron."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo sincronizar Stock. Los datos anteriores se conservaron."; }
         finally { saveLock.Release(); }
         await InvokeAsync(StateHasChanged);
     }
@@ -84,20 +84,20 @@
         if (field == 0) price.Cost = value;
         else if (field == 1) price.DesiredProfitPercent = value;
         else { price.SalePrice = value; price.ManualSalePrice = true; }
-        await Save();
+        await Save(price);
     }
-    private async Task UseSuggested(ProductPrice price) { price.ManualSalePrice = false; await Save(); }
-    private async Task Save()
+    private async Task UseSuggested(ProductPrice price) { price.ManualSalePrice = false; await Save(price); }
+    private async Task Save(ProductPrice price)
     {
         await saveLock.WaitAsync();
-        try { await storage!.InvokeVoidAsync("save", prices.Values.ToList()); status = "Cambios guardados."; }
-        catch (JSException) { status = "No se pudieron guardar los cambios. Revisá el espacio o los permisos del navegador."; }
+        try { await Data.SavePriceAsync(price); status = "Cambios guardados."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudieron guardar los cambios. Revisá la conexión o permisos de la base de datos."; }
         finally { saveLock.Release(); }
     }
-    public async ValueTask DisposeAsync()
-    {
-        try { if (watcher is not null) { await watcher.InvokeVoidAsync("dispose"); await watcher.DisposeAsync(); } if (storage is not null) await storage.DisposeAsync(); }
-        catch (JSDisconnectedException) { }
-        receiver?.Dispose();
-    }
+    public void Dispose() => Data.ProductsChanged -= ProductsChanged;
 }
+
+
+
+
+

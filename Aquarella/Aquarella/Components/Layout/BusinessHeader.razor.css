@@ -41,3 +41,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--secondary, #287
 .session-link:hover { background: var(--accent-surface); }
 .session-link:focus-visible { outline: 2px solid var(--secondary); }
 .session-notice { font-size: 13px; color: var(--accent-text); margin: 10px 16px; }
+.notice-badge { margin-left: auto; min-width: 22px; padding: 2px 6px; box-sizing: border-box; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); font-size: 12px; text-align: center; font-weight: 650; }
+.drawer-heading { gap: 12px; }
+.drawer-heading strong, .session-user, .menu-panel nav a span { min-width: 0; overflow-wrap: anywhere; }
+.drawer-heading .menu-button { flex-shrink: 0; }
+.menu-panel { overscroll-behavior-y: contain; }
+.search-results { max-height: min(50dvh, 340px); overflow-y: auto; overscroll-behavior-y: contain; }
+.search-results a { gap: 12px; overflow-wrap: anywhere; }
+.session-link { min-height: 44px; }

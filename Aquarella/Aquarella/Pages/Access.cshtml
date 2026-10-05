@@ -1,0 +1,49 @@
+@page
+@model Aquarella.Pages.AccessModel
+@{ ViewData["Title"] = Model.Title; var registrationEmail = TempData.Peek("RegistrationEmail") as string; }
+<h1>@Model.Title</h1>
+@if (Model.Flow == "crear-cuenta") { <p class="account-muted">Empezá a organizar tu negocio con Aquarella.</p> }
+@if (Model.Legacy is not null) { <p class="account-muted">Vinculá tu cuenta a los datos de desarrollo existentes. Se conservará tu negocio.</p> }
+@if (Model.Message is not null) { <p class="account-status @(Model.Success ? "success" : "error")" role="status">@Model.Message</p> }
+@if (Model.Flow == "verificar-correo") {
+    <a class="account-primary" href="/login">@(Model.Success ? "Continuar a Aquarella" : "Volver a iniciar sesión")</a>
+} else if (Model.Flow == "nueva-contrasena" && Model.Success) {
+    <a class="account-primary" href="/login">Iniciar sesión</a>
+} else {
+    @if (Model.Flow == "verificar-email") {
+        @if (Model.EmailAvailable) { <p>Te enviamos un enlace para verificar tu cuenta.</p> }
+        @if (registrationEmail is not null) { <p class="account-muted">@registrationEmail</p> }
+    }
+    @if (Model.Flow == "recuperar-contrasena") { <p class="account-muted">Ingresá tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.</p> }
+    @if (Model.Development && Model.Flow is "verificar-email" or "recuperar-contrasena") { <p class="account-muted">Desarrollo local: no se envían emails. Consultá el enlace en <code>App_Data/development-emails</code>.</p> }
+    <form method="post" class="account-form" novalidate>
+        <input type="hidden" asp-for="Token" /><input type="hidden" asp-for="Legacy" />
+        @if (Model.Flow == "crear-cuenta") {
+            <label asp-for="FirstName">Nombre</label><input asp-for="FirstName" autocomplete="given-name" maxlength="100" /><span asp-validation-for="FirstName"></span>
+            <label asp-for="LastName">Apellido</label><input asp-for="LastName" autocomplete="family-name" maxlength="100" /><span asp-validation-for="LastName"></span>
+        }
+        @if (Model.Flow != "nueva-contrasena") {
+            <label asp-for="Email">Correo electrónico</label><input asp-for="Email" type="email" autocomplete="email" maxlength="254" /><span asp-validation-for="Email"></span>
+        }
+        @if (Model.Flow is "login" or "crear-cuenta" or "nueva-contrasena") {
+            <label asp-for="Password">@(Model.Flow == "nueva-contrasena" ? "Nueva contraseña" : "Contraseña")</label>
+            <div class="password-field"><input asp-for="Password" type="password" value="" autocomplete="@(Model.Flow == "login" ? "current-password" : "new-password")" maxlength="256" data-strength="@(Model.Flow != "login" ? "true" : "false")" /><button type="button" class="password-toggle" data-for="Password" aria-label="Mostrar contraseña" aria-pressed="false">Mostrar</button></div><span asp-validation-for="Password"></span>
+            @if (Model.Flow != "login") {
+                <small class="account-muted">Entre 12 y 256 caracteres. Podés usar una frase larga.</small><small id="password-strength" aria-live="polite">Débil</small>
+                <label asp-for="Confirmation">Repetir contraseña</label><div class="password-field"><input asp-for="Confirmation" type="password" value="" autocomplete="new-password" maxlength="256" /><button type="button" class="password-toggle" data-for="Confirmation" aria-label="Mostrar repetición de contraseña" aria-pressed="false">Mostrar</button></div><span asp-validation-for="Confirmation"></span>
+            } else {
+                <a class="account-link" href="/recuperar-contrasena">¿Olvidaste tu contraseña?</a>
+                <label class="account-checkbox"><input asp-for="Remember" /> Mantener sesión iniciada</label>
+            }
+        }
+        <button class="account-primary" type="submit">@(Model.Flow switch { "crear-cuenta" => "Crear cuenta", "recuperar-contrasena" => "Enviar enlace", "verificar-email" => "Reenviar correo", "nueva-contrasena" => "Guardar nueva contraseña", _ => "Iniciar sesión" })</button>
+    </form>
+    @if (Model.Development && Model.Flow == "login") {
+        <form method="post" action="/login?handler=Development" asp-antiforgery="true" class="account-form">
+            <button class="account-primary account-secondary" type="submit">Entrar sin cuenta</button>
+            <small class="account-muted account-development-hint">Acceso de prueba</small>
+        </form>
+    }
+    @if (Model.Flow == "login") { <p class="account-footer">¿No tenés una cuenta? <a href="/crear-cuenta">Crear cuenta</a></p><p class="account-footer"><a href="/verificar-email">Reenviar verificación</a></p> }
+    else { <p class="account-footer">@(Model.Flow == "crear-cuenta" ? "¿Ya tenés una cuenta?" : "") <a href="/login">@(Model.Flow == "crear-cuenta" ? "Iniciar sesión" : "Volver a iniciar sesión")</a></p> }
+}

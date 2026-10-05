@@ -1,2 +1,14 @@
-.tutorial-button { margin-top: 24px; padding: 14px 22px; border: 0; border-radius: 12px; background: var(--secondary); color: var(--on-secondary); font: inherit; font-weight: 600; cursor: pointer; }
-.tutorial-button:focus-visible { outline: 2px solid var(--secondary); outline-offset: 3px; }
+.page-settings { max-width: 1100px; margin: 0 auto; }
+.intro { color: var(--muted); margin: 14px 0 var(--space-xl); }
+.profile-section { padding: var(--space-xl); margin-bottom: var(--space-lg); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); color: var(--surface-text); box-shadow: var(--shadow-sm); }
+h2 { margin: 0 0 var(--space-sm); color: var(--heading); font-size: 20px; font-weight: 600; }
+h3 { margin: var(--space-lg) 0 var(--space-sm); font-size: 16px; font-weight: 600; }
+.hint { color: var(--surface-muted); font-size: 13px; line-height: 1.6; }
+fieldset { padding: 0; margin: var(--space-lg) 0 0; border: 0; min-width: 0; }
+.color-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-lg); }
+.save-button, .tutorial-button { margin-top: var(--space-lg); min-height: 44px; padding: 14px 22px; border: 0; border-radius: var(--radius-sm); background: var(--secondary); color: var(--on-secondary); font: inherit; font-weight: 600; cursor: pointer; }
+fieldset:disabled .save-button { opacity: .5; cursor: not-allowed; }
+.save-status { color: var(--heading); font-size: 14px; }
+::deep .validation-message { color: var(--danger); font-size: 13px; margin-top: var(--space-sm); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 700px) { .color-grid { grid-template-columns: 1fr; } .profile-section { padding: var(--space-lg); } .save-button, .tutorial-button { width: 100%; } }

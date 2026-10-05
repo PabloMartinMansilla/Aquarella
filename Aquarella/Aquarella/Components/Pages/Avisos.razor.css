@@ -1,0 +1,20 @@
+.notices-page { max-width: 1100px; margin: 0 auto; }
+.intro, .notice-count { color: var(--muted); margin: var(--space-md) 0 var(--space-lg); }
+.notice-count { font-size: 14px; }
+.notice-group, .empty-state { padding: var(--space-lg); margin-bottom: var(--space-lg); background: var(--surface); color: var(--surface-text); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
+.notice-group { border-inline-start: 3px solid var(--danger); animation: aq-page var(--motion-normal) var(--ease-soft); }
+.notice-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.severity { display: inline-flex; align-items: center; gap: var(--space-sm); color: var(--danger); font-size: 12px; font-weight: 650; }
+.severity > span { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid currentColor; border-radius: var(--radius-pill); }
+.group-count { font-size: 12px; color: var(--surface-muted); }
+h2 { font-size: 20px; color: var(--heading); margin: var(--space-md) 0 var(--space-sm); }
+.group-description, li span, .empty-state p { font-size: 14px; color: var(--surface-muted); }
+details { margin-block: var(--space-md); }
+summary { cursor: pointer; min-height: 44px; box-sizing: border-box; padding-block: 10px; font-size: 14px; color: var(--heading); }
+summary:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 3px; border-radius: var(--radius-sm); }
+ul { list-style: none; padding: 0; margin: 0; max-height: 320px; overflow-y: auto; }
+li { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-md); border-top: 1px solid var(--border-soft); padding-block: 12px; font-size: 14px; overflow-wrap: anywhere; }
+.notice-action, .primary-button { display: inline-flex; justify-content: center; align-items: center; gap: var(--space-sm); min-height: 44px; box-sizing: border-box; padding: 10px 16px; background: var(--accent-surface); color: var(--accent-text); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.notice-action:hover { box-shadow: var(--shadow-sm); }
+.clear-icon { color: var(--success); font-size: 24px; }
+@media (max-width: 600px) { li { flex-direction: column; gap: var(--space-xs); } .notice-action { width: 100%; } .notice-group { padding: var(--space-md); } }

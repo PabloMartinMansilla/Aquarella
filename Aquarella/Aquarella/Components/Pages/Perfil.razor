@@ -50,16 +50,6 @@
             </div>
         </section>
 
-        <section class="profile-section" aria-labelledby="colors-title">
-            <h2 id="colors-title">Personalización</h2>
-            <p class="hint">Explorá tu paleta. Al guardar, esta paleta se aplica a toda la aplicación.</p>
-            <div class="color-grid">
-                <div><ColorField Id="primary-color" Label="Color primario" @bind-Value="profile.PrimaryColor" /><ValidationMessage For="() => profile.PrimaryColor" /></div>
-                <div><ColorField Id="secondary-color" Label="Color secundario" @bind-Value="profile.SecondaryColor" /><ValidationMessage For="() => profile.SecondaryColor" /></div>
-                <div><ColorField Id="tertiary-color" Label="Color terciario" @bind-Value="profile.TertiaryColor" /><ValidationMessage For="() => profile.TertiaryColor" /></div>
-            </div>
-        </section>
-
         <section class="profile-section" aria-labelledby="contact-title">
             <h2 id="contact-title">Contacto</h2>
             <div class="field-grid">
@@ -90,10 +80,10 @@
         </section>
 
         <div class="save-bar">
-            <p class="hint">Se guarda en este navegador y se conserva al recargar.</p>
-            <button class="save-button" type="submit" disabled="@(loadingLogo || saving || !ready)">@(loadingLogo ? "Procesando logo…" : "Guardar cambios")</button>
+            <p class="hint">Se guarda en la base de datos y se conserva al recargar.</p>
+            <button class="save-button" type="submit" aria-busy="@(saving || loadingLogo)" disabled="@(loadingLogo || saving || !ready)">@(loadingLogo ? "Procesando logo…" : "Guardar cambios")</button>
         </div>
-        <p class="save-status" role="status" aria-live="polite">@status</p>
+        <p class="save-status" data-feedback role="status" aria-live="polite">@status</p>
     </EditForm>
 </main>
 
@@ -109,14 +99,19 @@
     {
         if (!firstRender) return;
         try { await ProfileStore.InitializeAsync(); profile = ProfileStore.Load(); ready = true; }
-        catch (Microsoft.JSInterop.JSException) { status = "No se pudo acceder al almacenamiento de este navegador."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo acceder al almacenamiento de este navegador."; }
         StateHasChanged();
     }
     private async Task Save()
     {
         saving = true;
+        // Appearance is edited separately; a business-profile save preserves the saved palette.
+        var appearance = ProfileStore.Load();
+        profile.PrimaryColor = appearance.PrimaryColor;
+        profile.SecondaryColor = appearance.SecondaryColor;
+        profile.TertiaryColor = appearance.TertiaryColor;
         try { await ProfileStore.SaveAsync(profile); status = "Perfil guardado. La identidad del negocio ya está actualizada."; }
-        catch (Microsoft.JSInterop.JSException) { status = "No se pudo guardar. Revisá el espacio o los permisos de almacenamiento del navegador."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá el espacio o los conexión o permisos de la base de datos."; }
         finally { saving = false; }
     }
     private void InvalidSave(EditContext context) => status = "Revisá los campos indicados antes de guardar.";
@@ -146,6 +141,8 @@
         finally { loadingLogo = false; }
     }
 }
+
+
 
 
 

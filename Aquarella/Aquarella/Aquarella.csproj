@@ -8,4 +8,19 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Local outbox JSON files must never become publish content, even outside Docker. -->
+    <Content Remove="App_Data/**;production-data/**;data-protection-keys/**;.env;.env.*;**/*.pfx;**/*.pem;**/*.key" />
+    <None Remove="App_Data/**;production-data/**;data-protection-keys/**;.env;.env.*;**/*.pfx;**/*.pem;**/*.key" />
+    <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.12">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+
 </Project>

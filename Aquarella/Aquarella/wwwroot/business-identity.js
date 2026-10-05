@@ -1,4 +1,4 @@
-// Provisional browser persistence. No network calls or user-account storage.
+// Legacy profile reader plus presentation-only theme application/cache; SQLite is authoritative.
 (() => {
     const key = 'aquarella.business-profile.v1';
     const defaults = { primaryColor: '#F7F9F6', secondaryColor: '#28745B', tertiaryColor: '#203E32' };
@@ -24,12 +24,17 @@
         const surfaceText = readable(surface);
         const heading = contrast(secondary, primary) >= 4.5 && contrast(secondary, surface) >= 4.5 ? secondary : text;
         const accentText = contrast(tertiary, surface) >= 4.5 ? tertiary : surfaceText;
+        const semantic = (light, dark) => contrast(light, surface) >= 4.5 ? light
+            : contrast(dark, surface) >= 4.5 ? dark : surfaceText;
         const values = {
             primary, secondary, tertiary, surface, 'surface-text': surfaceText, text,
             heading, 'accent-text': accentText, 'on-secondary': readable(secondary),
             border: mix(tertiary, surface, 0.7), muted: mix(text, primary, 0.23),
             'surface-muted': mix(surfaceText, surface, 0.23),
-            'accent-surface': mix(tertiary, surface, 0.92)
+            'accent-surface': mix(tertiary, surface, 0.92),
+            success: semantic('#28754B', '#83D9A0'),
+            warning: semantic('#946400', '#F2CE78'),
+            danger: semantic('#B83232', '#FFAAA0')
         };
         for (const [name, value] of Object.entries(values)) document.documentElement.style.setProperty(`--${name}`, value);
     }
@@ -45,12 +50,12 @@
     }
     window.aquarellaIdentity = {
         load,
-        refresh() { try { apply(load()); } catch { apply(null); } },
-        save(profile) {
-            // Commit storage first: quota errors must not pretend the profile was saved.
-            localStorage.setItem(key, JSON.stringify(profile));
-            apply(profile);
-        }
+        display(profile) { window.aquarellaCurrentProfile = profile; apply(profile); try { localStorage.setItem("aquarella.theme-cache.v1", JSON.stringify({ primaryColor: profile.primaryColor, secondaryColor: profile.secondaryColor, tertiaryColor: profile.tertiaryColor })); } catch { } },
+        refresh() { try { apply(window.aquarellaCurrentProfile ?? JSON.parse(localStorage.getItem("aquarella.theme-cache.v1") ?? "null") ?? load()); } catch { apply(null); } },
+
     };
-    try { apply(load()); } catch { apply(null); }
+    try { apply(window.aquarellaCurrentProfile ?? JSON.parse(localStorage.getItem("aquarella.theme-cache.v1") ?? "null") ?? load()); } catch { apply(null); }
 })();
+
+
+

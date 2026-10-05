@@ -1,8 +1,8 @@
 @page "/stock"
 @rendermode InteractiveServer
 @using Aquarella.Models
-@implements IAsyncDisposable
-@inject IJSRuntime JS
+
+@inject Aquarella.Services.BusinessData Data
 
 <PageTitle>Stock · Aquarella</PageTitle>
 <main class="module-page stock-page">
@@ -16,13 +16,13 @@
                 <label>Nombre del producto<input @bind="name" @bind:event="oninput" maxlength="120" required /></label>
                 <label>@(editId is null ? "Cantidad inicial" : "Cantidad actual")<input type="number" min="0" max="2147483647" @bind="quantity" @bind:event="oninput" required /></label>
             </div>
-            <div class="form-actions"><button class="primary-button" disabled="@busy" type="submit">Guardar producto</button><button class="quiet-button" disabled="@busy" type="button" @onclick="() => editing = false">Cancelar</button></div>
+            <div class="form-actions"><button class="primary-button" aria-busy="@busy" disabled="@busy" type="submit">Guardar producto</button><button class="quiet-button" disabled="@busy" type="button" @onclick="() => editing = false">Cancelar</button></div>
         </form>
     }
-    <p class="status" role="status" aria-live="polite">@status</p>
+    <p class="status" data-feedback role="status" aria-live="polite">@status</p>
     <section class="product-list" aria-label="Productos">
         @if (!ready) { <p class="empty-state">@(loadFailed ? "No se pudo cargar el stock. Recargá la página para volver a intentar." : "Cargando productos…")</p> }
-        else if (products.Count == 0) { <p class="empty-state">Todavía no hay productos. Agregá el primero para comenzar.</p> }
+        else if (products.Count == 0) { <div class="empty-state"><p>Todavía no tenés productos.</p>@if (!editing) { <button class="primary-button" disabled="@busy" @onclick="NewProduct">Agregar el primero</button> }</div> }
         @foreach (var product in products)
         {
             <article class="product-row" @key="product.Id">
@@ -47,13 +47,13 @@
             </article>
         }
     </section>
-    <p class="storage-note">Los productos se guardan en este navegador y se conservan al recargar. Usá ajustes positivos para sumar y negativos para restar.</p>
+    <p class="storage-note">Los productos se guardan en la base de datos y se conservan al recargar. Usá ajustes positivos para sumar y negativos para restar.</p>
 </main>
 
 @code {
     private List<StockProduct> products = [];
     private readonly Dictionary<Guid, int> adjustments = [];
-    private IJSObjectReference? storage;
+
     private bool ready, busy, editing, loadFailed;
     private Guid? editId, deleteId;
     private string name = "";
@@ -65,12 +65,11 @@
         if (!firstRender) return;
         try
         {
-            storage = await JS.InvokeAsync<IJSObjectReference>("import", "./stock-storage.js");
-            products = await storage.InvokeAsync<List<StockProduct>>("load");
+            products = await Data.LoadProductsAsync();
             foreach (var product in products) adjustments[product.Id] = 0;
             ready = true;
         }
-        catch (JSException) { loadFailed = true; status = "No se pudo acceder a los productos guardados. No se sobrescribieron los datos."; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { loadFailed = true; status = "No se pudo acceder a los productos guardados. No se sobrescribieron los datos."; }
         StateHasChanged();
     }
     private void NewProduct() { editId = null; name = ""; quantity = 0; editing = true; status = null; }
@@ -84,34 +83,34 @@
     {
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120 || quantity < 0) { status = "Ingresá un nombre y una cantidad válida, sin valores negativos."; return; }
         var product = new StockProduct(editId ?? Guid.NewGuid(), name.Trim(), quantity);
-        var next = products.ToList();
-        if (editId is null) next.Add(product);
-        else next[next.FindIndex(p => p.Id == editId)] = product;
-        if (await Persist(next)) { adjustments[product.Id] = 0; editing = false; status = "Producto guardado."; }
+
+        if (await Persist(() => Data.SaveProductAsync(product, editId is null))) { adjustments[product.Id] = 0; editing = false; status = "Producto guardado."; }
     }
     private async Task Confirm(StockProduct product)
     {
         var result = (long)product.Quantity + adjustments[product.Id];
         if (result < 0 || result > int.MaxValue) { status = "La cantidad final debe estar entre 0 y 2.147.483.647."; return; }
-        if (await Persist(products.Select(p => p.Id == product.Id ? p with { Quantity = (int)result } : p).ToList()))
+        if (await Persist(() => Data.AdjustAsync(product.Id, adjustments[product.Id])))
         { adjustments[product.Id] = 0; if (editId == product.Id) editing = false; status = "Cantidad actualizada."; }
     }
     private async Task Delete(Guid id)
     {
-        if (await Persist(products.Where(p => p.Id != id).ToList()))
+        if (await Persist(() => Data.DeleteProductAsync(id)))
         { adjustments.Remove(id); deleteId = null; if (editId == id) editing = false; status = "Producto eliminado."; }
     }
-    private async Task<bool> Persist(List<StockProduct> next)
+    private async Task<bool> Persist(Func<Task> operation)
     {
-        if (busy || !ready || storage is null) return false;
+        if (busy || !ready) return false;
         busy = true;
-        try { await storage.InvokeVoidAsync("save", next); products = next; return true; }
-        catch (JSException) { status = "No se pudo guardar. Revisá el espacio o los permisos del navegador; los datos anteriores se conservaron."; return false; }
+        try { await operation(); products = await Data.LoadProductsAsync(); return true; }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá la conexión o permisos de la base de datos; los datos anteriores se conservaron."; return false; }
         finally { busy = false; }
     }
-    public async ValueTask DisposeAsync()
-    {
-        if (storage is not null) { try { await storage.DisposeAsync(); } catch (JSDisconnectedException) { } }
-    }
+
 }
+
+
+
+
+
 

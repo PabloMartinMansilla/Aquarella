@@ -1,7 +1,8 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @inject Aquarella.Services.BusinessProfileStore ProfileStore
-@inject Aquarella.Services.LocalSessionStore Session
+@inject Aquarella.Services.Accounts.AccountSession Session
+@inject Aquarella.Services.NoticesStore Notices
 
 <header class="business-header">
     <div class="business-title">
@@ -56,17 +57,22 @@
             <button class="menu-button" type="button" aria-label="Cerrar menú" @onclick="CloseMenu" @ref="closeButton">✕</button>
         </div>
         <nav aria-label="Navegación principal">
-            <a href="/" @onclick="CloseMenu">Inicio</a>
+            <a href="/" @onclick="CloseMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10H3z M9 20v-7h6v7" /></svg><span>Inicio</span></a>
             @foreach (var module in ModuleCatalog.All)
             {
-                <a href="@module.Route" @onclick="CloseMenu">@module.Title</a>
+                <a href="@module.Route" @onclick="CloseMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="@module.IconPath" /></svg><span>@module.Title</span>
+                    @if (module.Route == "/avisos" && Notices.Ready && Notices.Error is null && Notices.Items.Count > 0)
+                    {
+                        <span class="notice-badge" aria-label="@($"{Notices.Items.Count} problemas activos, hay avisos críticos")">@Notices.Items.Count</span>
+                    }
+                </a>
             }
-            <a href="/conversaciones/chat" @onclick="CloseMenu">Chat de Aquarella</a>
-            <a href="/configuracion-pagina" @onclick="CloseMenu" @ref="lastMenuLink">Configuración de página</a>
+            <a href="/conversaciones/chat" @onclick="CloseMenu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4z M8 8h8 M8 12h5" /></svg><span>Chat de Aquarella</span></a>
+            <a href="/configuracion-pagina" @onclick="CloseMenu" @ref="lastMenuLink"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16 M8 4v4 M16 10v4 M10 16v4" /></svg><span>Configuración de página</span></a>
             @if (Session.IsSignedIn) {
-                <span class="session-user">pablo</span><button class="session-link" @onclick="SignOut">Cerrar sesión</button>
+                <span class="session-user">@Session.DisplayName</span><a href="/mi-cuenta" data-enhance-nav="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4" /><path d="M5 21v-2a7 7 0 0 1 14 0v2" /></svg><span>Mi cuenta</span></a>
+                <form method="post" action="/mi-cuenta?handler=Logout" data-enhance="false"><AntiforgeryToken /><button class="session-link" type="submit">Cerrar sesión</button></form>
             } else { <a href="/login" @onclick="CloseMenu">Iniciar sesión</a> }
-            <p class="session-notice" role="status">@sessionError</p>
         </nav>
     </aside>
 </div>
@@ -78,14 +84,11 @@
         identity = ProfileStore.Load();
         ProfileStore.Changed += IdentityChanged;
         Session.Changed += IdentityChanged;
+        Notices.Changed += NoticesChanged;
     }
     private void IdentityChanged() => _ = InvokeAsync(() => { identity = ProfileStore.Load(); StateHasChanged(); });
-    public void Dispose() { ProfileStore.Changed -= IdentityChanged; Session.Changed -= IdentityChanged; }
-    private string? sessionError;
-    private async Task SignOut() {
-        try { await Session.SignOutAsync(); sessionError = null; await CloseMenu(); }
-        catch (JSException) { sessionError = "No se pudo cerrar la sesión. Revisá los permisos del navegador."; }
-    }
+    private void NoticesChanged() => _ = InvokeAsync(StateHasChanged);
+    public void Dispose() { ProfileStore.Changed -= IdentityChanged; Session.Changed -= IdentityChanged; Notices.Changed -= NoticesChanged; }
     private bool menuOpen;
     private bool focusMenu;
     private string query = string.Empty;
@@ -99,9 +102,10 @@
     {
         if (firstRender)
         {
-            try { await Session.InitializeAsync(); } catch (JSException) { }
+            try { await Session.InitializeAsync(); } catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { }
             try { await ProfileStore.InitializeAsync(); }
-            catch (Microsoft.JSInterop.JSException) { /* Keep the default identity if browser storage is unavailable. */ }
+            catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { /* Keep the default identity if browser storage is unavailable. */ }
+            if (Session.IsSignedIn) await Notices.InitializeAsync();
         }
         if (focusMenu) { focusMenu = false; await closeButton.FocusAsync(); }
     }
@@ -112,6 +116,7 @@
     }
     private void ClearSearch() => query = string.Empty;
 }
+
 
 
 

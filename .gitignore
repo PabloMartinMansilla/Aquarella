@@ -1,0 +1,8 @@
+# Deployment secrets and persistent storage, including files at repository root.
+.env
+.env.*
+**/production-data/
+**/data-protection-keys/
+*.pfx
+*.pem
+*.key

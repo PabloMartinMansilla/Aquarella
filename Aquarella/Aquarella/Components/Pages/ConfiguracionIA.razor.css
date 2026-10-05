@@ -1,0 +1,36 @@
+.ai-settings { max-width: 1100px; margin: 0 auto; }
+.intro { color: var(--muted); margin: var(--space-md) 0 var(--space-lg); }
+.preparation-note { padding: var(--space-md) var(--space-lg); margin-bottom: var(--space-lg); border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--accent-surface); color: var(--accent-text); font-size: 14px; }
+.preparation-note p { margin-bottom: 0; line-height: 1.6; }
+fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+.settings-section { margin-bottom: var(--space-lg); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); background: var(--surface); color: var(--surface-text); box-shadow: var(--shadow-sm); overflow: hidden; }
+summary { padding: var(--space-lg); cursor: pointer; color: var(--heading); font-weight: 600; min-height: 44px; }
+summary span { display: block; padding-top: var(--space-xs); margin-left: 18px; font-size: 13px; font-weight: 400; color: var(--surface-muted); }
+summary:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -4px; }
+.section-content { padding: 0 var(--space-lg) var(--space-lg); }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); }
+.field label, .future-item label { display: block; font-size: 14px; font-weight: 600; margin-bottom: var(--space-sm); }
+.field ::deep select, .field ::deep textarea, .future-item select { width: 100%; box-sizing: border-box; min-width: 0; min-height: 44px; padding: 12px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--surface-text); font: inherit; }
+.field ::deep textarea { resize: vertical; }
+.instructions { margin-top: var(--space-lg); }
+.hint, .future-item p { font-size: 13px; color: var(--surface-muted); line-height: 1.6; }
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-lg); min-height: 44px; padding-block: var(--space-md); cursor: pointer; border-bottom: 1px solid var(--border-soft); }
+.toggle-row strong { font-size: 14px; font-weight: 600; }
+.toggle-row small { display: block; margin-top: var(--space-xs); font-size: 13px; line-height: 1.5; color: var(--surface-muted); }
+.toggle-row ::deep input { appearance: none; position: relative; flex-shrink: 0; width: 42px; height: 26px; margin: 0; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--accent-surface); cursor: pointer; }
+.toggle-row ::deep input::before { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--surface-text); transition: transform var(--motion-fast); }
+.toggle-row ::deep input:checked { background: var(--heading); border-color: var(--heading); }
+.toggle-row ::deep input:checked::before { transform: translateX(16px); background: var(--on-secondary); }
+.toggle-row ::deep input:disabled { cursor: not-allowed; opacity: .5; }
+.proactivity { margin-block: var(--space-lg); max-width: 400px; }
+.save-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.save-button, .quiet-button { min-height: 44px; padding: 14px 22px; border: 0; border-radius: var(--radius-sm); background: var(--secondary); color: var(--on-secondary); font: inherit; font-weight: 600; cursor: pointer; }
+fieldset:disabled .save-button { opacity: .5; cursor: not-allowed; }
+.save-status { font-size: 14px; color: var(--heading); }
+.future-badge { color: var(--surface-muted); }
+.future-item { padding-block: var(--space-md); border-bottom: 1px solid var(--border-soft); }
+.future-item h2 { font-size: 16px; margin: 0 0 var(--space-sm); }
+.future-item select { opacity: .65; }
+::deep .validation-message { color: var(--danger); font-size: 13px; margin-top: var(--space-sm); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 600px) { .field-grid { grid-template-columns: 1fr; } .save-bar { flex-direction: column; align-items: stretch; } summary { padding: var(--space-md); } .section-content { padding: 0 var(--space-md) var(--space-md); } .preparation-note { padding: var(--space-md); } }

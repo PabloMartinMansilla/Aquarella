@@ -1,0 +1,12 @@
+@using Aquarella.Models
+@using System.Globalization
+<ul class="product-metrics">
+    @foreach (var product in Products)
+    {
+        <li @key="product.Id"><strong>@product.Name</strong><span class="percentage">@product.ProfitPercent.ToString("N2", Culture)%</span><span class="detail">Costo $@product.Cost.ToString("N2", Culture) · Venta $@product.SalePrice.ToString("N2", Culture)</span><span class="detail">Ganancia por unidad: $@product.Profit.ToString("N2", Culture)</span></li>
+    }
+</ul>
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ProductProfitMetric> Products { get; set; } = [];
+    private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-AR");
+}

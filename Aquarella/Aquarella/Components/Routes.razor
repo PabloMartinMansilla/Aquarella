@@ -1,50 +1,15 @@
 @rendermode InteractiveServer
-@implements IDisposable
-@inject Aquarella.Services.LocalSessionStore Session
-@inject NavigationManager Navigation
-
-@if (!ready)
-{
-    <p role="status">Cargando sesión…</p>
-}
-else
-{
+@inject Aquarella.Services.Accounts.AccountSession Session
+<CascadingAuthenticationState>
     <Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Pages.NotFound)">
         <Found Context="routeData">
-            @if (Session.IsSignedIn || routeData.PageType == typeof(Pages.Login))
-            {
-                <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-                <FocusOnNavigate RouteData="routeData" Selector="h1" />
-            }
-            else
-            {
-                <LayoutView Layout="typeof(Layout.MainLayout)"><Aquarella.Components.Pages.Login /></LayoutView>
-            }
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                <NotAuthorized><RedirectToLogin /></NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
         </Found>
     </Router>
-}
-
+</CascadingAuthenticationState>
 @code {
-    private bool ready;
-    protected override void OnInitialized() => Session.Changed += SessionChanged;
-    private void SessionChanged() => _ = InvokeAsync(() => { RedirectIfNeeded(); StateHasChanged(); });
-    private void RedirectIfNeeded()
-    {
-        var isLogin = new Uri(Navigation.Uri).AbsolutePath.TrimEnd('/') == "/login";
-        if (!Session.IsSignedIn && !isLogin) Navigation.NavigateTo("/login", replace: true);
-    }
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try { await Session.InitializeAsync(); }
-            catch (JSException) { /* Fail closed: the login reports storage problems. */ }
-            ready = true;
-            RedirectIfNeeded();
-            StateHasChanged();
-        }
-        else RedirectIfNeeded();
-    }
-    public void Dispose() => Session.Changed -= SessionChanged;
+    protected override Task OnInitializedAsync() => Session.InitializeAsync();
 }
-
