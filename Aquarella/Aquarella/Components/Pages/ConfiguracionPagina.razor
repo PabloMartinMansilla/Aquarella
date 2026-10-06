@@ -4,6 +4,7 @@
 @rendermode InteractiveServer
 @using Aquarella.Models
 @inject Aquarella.Services.BusinessProfileStore ProfileStore
+@implements IDisposable
 
 <PageTitle>Configuración de página · Aquarella</PageTitle>
 
@@ -42,17 +43,19 @@
     private bool ready;
     private bool saving;
     private string? status;
+    private bool disposed;
+    public void Dispose() => disposed = true;
     protected override void OnInitialized() => appearance = ProfileStore.Load();
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        try { await ProfileStore.InitializeAsync(); appearance = ProfileStore.Load(); ready = true; }
+        if (!firstRender || disposed) return;
+        try { await ProfileStore.InitializeAsync(); if (!disposed) { appearance = ProfileStore.Load(); ready = true; status = ProfileStore.LoadWarning; } }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo cargar la configuración. Volvé a intentar recargando la página."; }
-        StateHasChanged();
+        if (!disposed) StateHasChanged();
     }
     private async Task SaveAppearance()
     {
-        if (!ready || saving) return;
+        if (disposed || !ready || saving) return;
         saving = true;
         try
         {
@@ -62,6 +65,7 @@
             current.SecondaryColor = appearance.SecondaryColor;
             current.TertiaryColor = appearance.TertiaryColor;
             await ProfileStore.SaveAsync(current);
+            if (disposed) return;
             appearance = ProfileStore.Load();
             status = "Colores guardados. La apariencia de Aquarella ya está actualizada.";
         }

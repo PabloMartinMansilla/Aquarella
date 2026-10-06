@@ -1,23 +1,30 @@
 @inject IJSRuntime JS
 @inject Aquarella.Services.Accounts.AccountSession Session
+@inject ILogger<OnboardingTour> Logger
 @implements IAsyncDisposable
 
 @code {
     private IJSObjectReference? module;
     private DotNetObjectReference<OnboardingTour>? callback;
+    private bool disposed;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender || !Session.IsSignedIn) return;
+        if (!firstRender || disposed || !Session.IsSignedIn) return;
         try {
-            module = await JS.InvokeAsync<IJSObjectReference>("import", "./onboarding.js");
+            var completed = await Session.CompletedTutorialAsync(); if (disposed) return;
+            var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./onboarding.js");
+            if (disposed) { await Aquarella.Services.BrowserModuleLifetime.ReleaseAsync(imported); return; }
+            module = imported;
             callback = DotNetObjectReference.Create(this);
-            await module.InvokeVoidAsync("start", Session.UserId, Session.ConsumeTutorialRequest(), await Session.CompletedTutorialAsync(), callback);
-        } catch (JSException) { /* Storage unavailable: never block the dashboard. */ }
+            await module.InvokeVoidAsync("start", Session.UserId, Session.ConsumeTutorialRequest(), completed, callback);
+        } catch (Exception e) when (e is JSException or JSDisconnectedException or OperationCanceledException or ObjectDisposedException) { }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { Logger.LogWarning("Tutorial unavailable ({ErrorType}).", e.GetType().Name); }
     }
-    [JSInvokable] public Task CompleteTutorial() => Session.CompleteTutorialAsync();
+    [JSInvokable] public Task CompleteTutorial() => disposed ? Task.CompletedTask : Session.CompleteTutorialAsync();
     public async ValueTask DisposeAsync()
     {
-        if (module is not null) { try { await module.InvokeVoidAsync("stop"); await module.DisposeAsync(); } catch (Exception e) when (e is JSException or JSDisconnectedException or OperationCanceledException or ObjectDisposedException) { /* Navigation or circuit shutdown already released the browser reference. */ } }
-        callback?.Dispose();
+        if (disposed) return; disposed = true;
+        try { if (module is not null) await Aquarella.Services.BrowserModuleLifetime.ReleaseAsync(module, "stop"); }
+        finally { callback?.Dispose(); }
     }
 }

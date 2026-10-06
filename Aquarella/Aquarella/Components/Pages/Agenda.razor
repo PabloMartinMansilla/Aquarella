@@ -5,6 +5,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject Aquarella.Services.AgendaStore Store
+@inject ILogger<Agenda> Logger
 
 <PageTitle>Agenda / Calendario · Aquarella</PageTitle>
 <main class="module-page agenda-page">
@@ -65,22 +66,47 @@
     private bool ready, busy, hasError;
     private IJSObjectReference? popover;
     private bool positionPending;
+    private bool disposed;
+    private bool importing;
     protected override void OnInitialized() => Store.Changed += Changed;
-    private void Changed() => _ = InvokeAsync(StateHasChanged);
+    private void Changed() { if (!disposed) _ = RenderChanged(); }
+    private async Task RenderChanged()
+    {
+        try { if (!disposed) await InvokeAsync(StateHasChanged); }
+        catch (Exception e) when (disposed && e is ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception e) { Logger.LogWarning(e, "Agenda view refresh failed."); }
+    }
     public async ValueTask DisposeAsync() {
-        Store.Changed -= Changed;
-        if (popover is not null) { try { await popover.InvokeVoidAsync("stop"); await popover.DisposeAsync(); } catch (JSDisconnectedException) { } }
+        if (disposed) return; disposed = true; Store.Changed -= Changed;
+        if (popover is not null) await Aquarella.Services.BrowserModuleLifetime.ReleaseAsync(popover, "stop");
     }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) {
-            if (selected is not null && popover is not null && positionPending) { positionPending = false; await popover.InvokeVoidAsync("open", "day-" + selected.Value.ToString("yyyy-MM-dd")); }
-            else if (selected is null && popover is not null) await popover.InvokeVoidAsync("stop");
-            return;
+        if (disposed) return;
+        if (firstRender)
+        {
+            try { await Store.InitializeAsync(); if (disposed) return; ready = true; StateHasChanged(); }
+            catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { if (!disposed) { status = "No se pudieron cargar las notas. Recargá para volver a intentar; los datos guardados se conservaron."; StateHasChanged(); } return; }
         }
-        try { await Store.InitializeAsync(); popover = await JS.InvokeAsync<IJSObjectReference>("import", "./agenda-popover.js"); ready = true; }
-        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudieron cargar las notas. Recargá para volver a intentar; los datos guardados se conservaron."; }
-        StateHasChanged();
+        if (!ready) return;
+        try
+        {
+            if (popover is null)
+            {
+                if (importing) return;
+                importing = true;
+                try
+                {
+                    var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./agenda-popover.js");
+                    if (disposed) { await Aquarella.Services.BrowserModuleLifetime.ReleaseAsync(imported); return; }
+                    popover = imported;
+                }
+                finally { importing = false; }
+            }
+            if (selected is not null && positionPending) { await popover.InvokeVoidAsync("open", "day-" + selected.Value.ToString("yyyy-MM-dd")); positionPending = false; }
+            else if (selected is null) await popover.InvokeVoidAsync("stop");
+        }
+        catch (JSDisconnectedException) { positionPending = selected is not null; }
     }
     private void MoveMonth(int direction) { month = month.AddMonths(direction); selected = null; Reset(); }
     private void Today() { month = new(DateTime.Today.Year, DateTime.Today.Month, 1); SelectDay(DateOnly.FromDateTime(DateTime.Today)); }
@@ -92,7 +118,7 @@
     private void Edit(AgendaNote note) { editId = note.Id; title = note.Title; content = note.Content; time = note.Time ?? ""; deleteId = null; }
     private async Task Save()
     {
-        if (busy || !ready || selected is null) return;
+        if (disposed || busy || !ready || selected is null) return;
         hasError = true;
         if (string.IsNullOrWhiteSpace(title) && string.IsNullOrWhiteSpace(content)) { status = "Ingresá al menos un título o un comentario. La hora es opcional."; return; }
         string? normalizedTime = null;
@@ -102,15 +128,16 @@
         }
         var note = new AgendaNote(editId ?? Guid.NewGuid(), selected.Value, title.Trim(), content, normalizedTime);
         busy = true;
-        try { await Store.SaveAsync(note); Reset(); hasError = false; status = "Nota guardada."; }
+        try { await Store.SaveAsync(note); if (!disposed) { Reset(); hasError = false; status = "Nota guardada."; } }
         catch (ArgumentException) { status = "Revisá el título, el contenido o la hora de la nota."; }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá la conexión o permisos de la base de datos; los datos anteriores se conservaron."; }
         finally { busy = false; }
     }
     private async Task Delete(Guid id)
     {
+        if (disposed || busy || !ready) return;
         busy = true;
-        try { await Store.DeleteAsync(id); if (editId == id) Reset(); deleteId = null; status = "Nota eliminada."; }
+        try { await Store.DeleteAsync(id); if (!disposed) { if (editId == id) Reset(); deleteId = null; status = "Nota eliminada."; } }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo eliminar la nota. Los datos anteriores se conservaron."; }
         finally { busy = false; }
     }

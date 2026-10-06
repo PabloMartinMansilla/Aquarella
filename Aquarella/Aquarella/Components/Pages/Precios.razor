@@ -4,6 +4,7 @@
 @using System.Globalization
 @implements IDisposable
 @inject Aquarella.Services.BusinessData Data
+@inject ILogger<Precios> Logger
 
 <PageTitle>Precios · Aquarella</PageTitle>
 <main class="module-page prices-page">
@@ -45,56 +46,101 @@
     private List<StockProduct> products = [];
     private Dictionary<Guid, ProductPrice> prices = [];
 
-    protected override void OnInitialized() => Data.ProductsChanged += ProductsChanged;
-    private void ProductsChanged() => _ = InvokeAsync(RefreshStock);
+    protected override void OnInitialized() => Data.NoticesChanged += ProductsChanged;
+    private bool refreshPending, refreshing;
+    private void ProductsChanged() { if (!disposed) _ = RefreshAfterChange(); }
+    private async Task RefreshAfterChange()
+    {
+        try { await InvokeAsync(async () => {
+            if (disposed) return;
+            refreshPending = true;
+            if (refreshing) return;
+            refreshing = true;
+            try { while (refreshPending && !disposed) { refreshPending = false; await RefreshStock(); } }
+            finally { refreshing = false; }
+        }); }
+        catch (Exception e) when (disposed && e is OperationCanceledException or ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception e) { Logger.LogWarning(e, "Price view refresh failed."); }
+    }
     private readonly SemaphoreSlim saveLock = new(1, 1);
+    private readonly Dictionary<Guid, long> revisions = [];
+    private readonly Dictionary<Guid, int> pendingEdits = [];
+    private readonly CancellationTokenSource lifetime = new();
+    private bool disposed;
     private bool ready, failed;
     private string? status;
     private static string Number(decimal value) => value.ToString(CultureInfo.InvariantCulture);
     private static string Money(decimal value) => value.ToString("N2", CultureInfo.GetCultureInfo("es-AR"));
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
+        if (!firstRender || disposed) return;
         try {
 
             await Load();
 
 
-            ready = true;
+            if (!disposed) ready = true;
+        } catch (OperationCanceledException) when (disposed) { return;
         } catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { failed = true; status = "No se pudo acceder al almacenamiento. Los datos guardados se conservaron."; }
-        StateHasChanged();
+        if (!disposed) StateHasChanged();
     }
-    private async Task Load()
+    private async Task Load(bool preserveDrafts = false)
     {
-        products = await Data.LoadProductsAsync();
-        prices = (await Data.LoadPricesAsync()).ToDictionary(p => p.ProductId);
-        foreach (var product in products) prices.TryAdd(product.Id, new ProductPrice { ProductId = product.Id });
+        if (disposed) return;
+        var token = lifetime.Token;
+        var loadedProducts = await Data.LoadProductsAsync(token);
+        var loadedPrices = (await Data.LoadPricesAsync(token)).ToDictionary(p => p.ProductId);
+        foreach (var product in loadedProducts) loadedPrices.TryAdd(product.Id, new ProductPrice { ProductId = product.Id });
+        if (preserveDrafts) foreach (var product in loadedProducts)
+            if (pendingEdits.GetValueOrDefault(product.Id) > 0 && prices.TryGetValue(product.Id, out var draft)) loadedPrices[product.Id] = draft;
+        if (!disposed) { products = loadedProducts; prices = loadedPrices; }
     }
     public async Task RefreshStock()
     {
-        await saveLock.WaitAsync();
-        try { await Load(); status = "Lista sincronizada con Stock."; }
+        if (disposed) return;
+        try { await saveLock.WaitAsync(lifetime.Token); }
+        catch (OperationCanceledException) when (disposed) { return; }
+        try { await Load(preserveDrafts: true); if (!disposed && !pendingEdits.Values.Any(n => n > 0)) status = "Precios sincronizados."; }
+        catch (OperationCanceledException) when (disposed) { }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo sincronizar Stock. Los datos anteriores se conservaron."; }
         finally { saveLock.Release(); }
-        await InvokeAsync(StateHasChanged);
+        if (!disposed) await InvokeAsync(StateHasChanged);
     }
     private async Task Change(ProductPrice price, int field, ChangeEventArgs args)
     {
+        if (disposed) return;
         if (!decimal.TryParse(args.Value?.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value) || value < 0 || value > (field == 0 ? 1_000_000_000m : field == 1 ? 10_000m : 1_000_000_000_000m)) { status = "Ingresá un número válido, sin valores negativos y dentro del rango permitido."; return; }
         if (field == 0) price.Cost = value;
         else if (field == 1) price.DesiredProfitPercent = value;
         else { price.SalePrice = value; price.ManualSalePrice = true; }
-        await Save(price);
+        await Save(new(price.ProductId, (PriceField)field, value));
     }
-    private async Task UseSuggested(ProductPrice price) { price.ManualSalePrice = false; await Save(price); }
-    private async Task Save(ProductPrice price)
+    private async Task UseSuggested(ProductPrice price) { if (disposed) return; price.ManualSalePrice = false; await Save(new(price.ProductId, PriceField.Suggested)); }
+    private async Task Save(PriceEdit edit)
     {
+        if (disposed) return;
+        var revision = revisions.GetValueOrDefault(edit.ProductId) + 1;
+        revisions[edit.ProductId] = revision;
+        pendingEdits[edit.ProductId] = pendingEdits.GetValueOrDefault(edit.ProductId) + 1;
+        status = "Guardando cambios…";
         await saveLock.WaitAsync();
-        try { await Data.SavePriceAsync(price); status = "Cambios guardados."; }
-        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudieron guardar los cambios. Revisá la conexión o permisos de la base de datos."; }
-        finally { saveLock.Release(); }
+        try
+        {
+            var actual = await Data.ApplyPriceEditAsync(edit);
+            if (!disposed && revisions[edit.ProductId] == revision) { prices[edit.ProductId] = actual; status = "Cambios guardados."; }
+        }
+        catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e))
+        {
+            if (disposed || revisions[edit.ProductId] != revision) return;
+            status = "No se pudieron guardar los cambios. Revisá la conexión o permisos de la base de datos.";
+            // Restore the persisted value, not the optimistic draft. Keep loading failures explicit.
+            try { await Load(); }
+            catch (OperationCanceledException) when (disposed) { }
+            catch (Exception reloadError) when (Aquarella.Services.PersistenceErrors.IsStorageError(reloadError)) { ready = false; failed = true; }
+        }
+        finally { pendingEdits[edit.ProductId]--; saveLock.Release(); }
     }
-    public void Dispose() => Data.ProductsChanged -= ProductsChanged;
+    public void Dispose() { if (disposed) return; disposed = true; Data.NoticesChanged -= ProductsChanged; lifetime.Cancel(); lifetime.Dispose(); }
 }
 
 

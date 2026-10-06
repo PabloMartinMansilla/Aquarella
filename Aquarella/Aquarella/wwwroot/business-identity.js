@@ -41,12 +41,11 @@
     function load() {
         const raw = localStorage.getItem(key);
         if (!raw) return null;
-        try {
-            const profile = JSON.parse(raw);
-            if (!profile || typeof profile.name !== 'string' || !profile.name.trim()
-                || !hex(profile.primaryColor) || !hex(profile.secondaryColor) || !hex(profile.tertiaryColor)) return null;
-            return profile;
-        } catch { return null; }
+        const profile = JSON.parse(raw);
+        if (!profile || typeof profile.name !== 'string' || !profile.name.trim()
+            || !hex(profile.primaryColor) || !hex(profile.secondaryColor) || !hex(profile.tertiaryColor))
+            throw new Error('El perfil local contiene datos inválidos. Se conservó sin importar.');
+        return profile;
     }
     window.aquarellaIdentity = {
         load,

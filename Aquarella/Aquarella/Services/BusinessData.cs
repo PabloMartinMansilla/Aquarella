@@ -7,7 +7,7 @@ namespace Aquarella.Services;
 
 // All operations validate the server session and scope queries to the authenticated user's business.
 // DbContexts are short lived; no EF tracking context is retained in the Blazor circuit.
-public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, Aquarella.Services.Accounts.AccountSession session, IJSRuntime js, DatabaseChanges? notifications = null) : IDisposable
+public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, Aquarella.Services.Accounts.AccountSession session, IJSRuntime js, DatabaseChanges? notifications = null, ILogger<BusinessData>? logger = null) : IDisposable
 {
     private Task? import;
     private readonly DatabaseChanges changes = notifications ?? new();
@@ -33,7 +33,8 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
     }
     public async Task EnsureImportedAsync()
     {
-        try { await (import ??= Import()); } catch { import = null; throw; }
+        try { await (import ??= Import()); }
+        catch (Exception e) { import = null; logger?.LogWarning("Business import/read failed ({ErrorType}); original data was not replaced.", e.GetType().Name); throw; }
     }
     private async Task Import()
     {
@@ -43,6 +44,8 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
         if (business.LegacyImported) return;
         await using var module = await js.InvokeAsync<IJSObjectReference>("import", "./legacy-import.js");
         var legacy = await module.InvokeAsync<LegacyData>("read");
+        if (legacy is null || legacy.Products is null || legacy.Prices is null || legacy.Notes is null)
+            throw new ValidationException("Los datos locales contienen colecciones inválidas. Se conservaron sin importar.");
         if (legacy.Profile is not null && !BusinessProfileStore.IsValid(legacy.Profile)) throw new ValidationException("El perfil local contiene datos inválidos; se conservó sin importar.");
         foreach (var p in legacy.Products) ValidateProduct(p);
         foreach (var p in legacy.Prices) ValidatePrice(p);
@@ -69,17 +72,17 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
         await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
         var b = await db.Businesses.SingleAsync(b => b.Id == id); db.Entry(b.Profile).CurrentValues.SetValues(profile); b.UpdatedAt = DateTime.UtcNow; await db.SaveChangesAsync();
     }
-    public async Task<List<StockProduct>> LoadProductsAsync() {
-        await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
-        return await db.Products.AsNoTracking().Where(p => p.BusinessId == id).OrderBy(p => p.CreatedAt).Select(p => new StockProduct(p.Id, p.Name, p.Quantity)).ToListAsync();
+    public async Task<List<StockProduct>> LoadProductsAsync(CancellationToken cancellationToken = default) {
+        await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(cancellationToken); var id = await BusinessId(db);
+        return await db.Products.AsNoTracking().Where(p => p.BusinessId == id).OrderBy(p => p.CreatedAt).Select(p => new StockProduct(p.Id, p.Name, p.Quantity)).ToListAsync(cancellationToken);
     }
-    public async Task<List<NoticeProduct>> LoadNoticeProductsAsync() {
-        await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
+    public async Task<List<NoticeProduct>> LoadNoticeProductsAsync(CancellationToken cancellationToken = default) {
+        await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(cancellationToken); var id = await BusinessId(db);
         return await db.Products.AsNoTracking().Where(p => p.BusinessId == id)
             .Select(p => new NoticeProduct(new StockProduct(p.Id, p.Name, p.Quantity), new ProductPrice {
                 ProductId = p.Id, Cost = p.Cost, DesiredProfitPercent = p.DesiredProfitPercent,
                 SalePrice = p.SalePrice, ManualSalePrice = p.ManualSalePrice
-            })).ToListAsync();
+            })).ToListAsync(cancellationToken);
     }
     public async Task SaveProductAsync(StockProduct value, bool create) {
         ValidateProduct(value); await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
@@ -131,9 +134,30 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
         await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
         await db.Products.Where(p => p.Id == productId && p.BusinessId == id).ExecuteDeleteAsync(); changes.Publish(id, "products");
     }
-    public async Task<List<ProductPrice>> LoadPricesAsync() {
-        await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
-        return await db.Products.AsNoTracking().Where(p => p.BusinessId == id).Select(p => new ProductPrice { ProductId = p.Id, Cost = p.Cost, DesiredProfitPercent = p.DesiredProfitPercent, SalePrice = p.SalePrice, ManualSalePrice = p.ManualSalePrice }).ToListAsync();
+    public async Task<List<ProductPrice>> LoadPricesAsync(CancellationToken cancellationToken = default) {
+        await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(cancellationToken); var id = await BusinessId(db);
+        return await db.Products.AsNoTracking().Where(p => p.BusinessId == id).Select(p => new ProductPrice { ProductId = p.Id, Cost = p.Cost, DesiredProfitPercent = p.DesiredProfitPercent, SalePrice = p.SalePrice, ManualSalePrice = p.ManualSalePrice }).ToListAsync(cancellationToken);
+    }
+    // Atomic field edits preserve unrelated changes made by another circuit. No schema change.
+    public async Task<ProductPrice> ApplyPriceEditAsync(PriceEdit edit)
+    {
+        var limit = edit.Field switch { PriceField.Cost => 1_000_000_000m, PriceField.DesiredProfitPercent => 10_000m, PriceField.SalePrice => 1_000_000_000_000m, PriceField.Suggested => 0m, _ => throw new ArgumentException("Campo de precio inválido.") };
+        if (edit.Value < 0 || edit.Value > limit) throw new ArgumentException("Precio inválido.");
+        await EnsureImportedAsync();
+        await using var db = await factory.CreateDbContextAsync();
+        var id = await BusinessId(db);
+        var query = db.Products.Where(p => p.Id == edit.ProductId && p.BusinessId == id);
+        var changed = edit.Field switch
+        {
+            PriceField.Cost => await query.Where(p => p.Cost != edit.Value).ExecuteUpdateAsync(s => s.SetProperty(p => p.Cost, edit.Value).SetProperty(p => p.UpdatedAt, DateTime.UtcNow)),
+            PriceField.DesiredProfitPercent => await query.Where(p => p.DesiredProfitPercent != edit.Value).ExecuteUpdateAsync(s => s.SetProperty(p => p.DesiredProfitPercent, edit.Value).SetProperty(p => p.UpdatedAt, DateTime.UtcNow)),
+            PriceField.SalePrice => await query.Where(p => p.SalePrice != edit.Value || !p.ManualSalePrice).ExecuteUpdateAsync(s => s.SetProperty(p => p.SalePrice, edit.Value).SetProperty(p => p.ManualSalePrice, true).SetProperty(p => p.UpdatedAt, DateTime.UtcNow)),
+            _ => await query.Where(p => p.ManualSalePrice).ExecuteUpdateAsync(s => s.SetProperty(p => p.ManualSalePrice, false).SetProperty(p => p.UpdatedAt, DateTime.UtcNow))
+        };
+        var actual = await query.AsNoTracking().Select(p => new ProductPrice { ProductId = p.Id, Cost = p.Cost, DesiredProfitPercent = p.DesiredProfitPercent, SalePrice = p.SalePrice, ManualSalePrice = p.ManualSalePrice }).SingleOrDefaultAsync()
+            ?? throw new InvalidOperationException("El producto ya no está disponible. Actualizá la lista de Stock.");
+        if (changed > 0) changes.Publish(id, "prices");
+        return actual;
     }
     public async Task SavePriceAsync(ProductPrice value) {
         ValidatePrice(value); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
@@ -153,9 +177,9 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
     public async Task DeleteNoteAsync(Guid noteId) {
         await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db); await db.CalendarEntries.Where(n => n.Id == noteId && n.BusinessId == id).ExecuteDeleteAsync(); changes.Publish(id, "notes");
     }
-    private static void ValidateProduct(StockProduct p) { if (p.Id == Guid.Empty || string.IsNullOrWhiteSpace(p.Name) || p.Name.Length > 120 || p.Quantity < 0) throw new ArgumentException("Producto inválido."); }
-    private static void ValidatePrice(ProductPrice p) { if (p.Cost < 0 || p.Cost > 1_000_000_000m || p.DesiredProfitPercent < 0 || p.DesiredProfitPercent > 10_000m || p.SalePrice < 0 || p.SalePrice > 1_000_000_000_000m) throw new ArgumentException("Precio inválido."); }
-    private static void ValidateNote(AgendaNote n) { if ((string.IsNullOrWhiteSpace(n.Title) && string.IsNullOrWhiteSpace(n.Content)) || n.Title.Length > 120 || n.Content.Length > 4000 || (n.Time is not null && !System.Text.RegularExpressions.Regex.IsMatch(n.Time, "^([01][0-9]|2[0-3]):[0-5][0-9]$"))) throw new ArgumentException("Nota inválida."); }
+    private static void ValidateProduct(StockProduct p) { if (p is null || p.Id == Guid.Empty || string.IsNullOrWhiteSpace(p.Name) || p.Name.Length > 120 || p.Quantity < 0) throw new ArgumentException("Producto inválido."); }
+    private static void ValidatePrice(ProductPrice p) { if (p is null || p.Cost < 0 || p.Cost > 1_000_000_000m || p.DesiredProfitPercent < 0 || p.DesiredProfitPercent > 10_000m || p.SalePrice < 0 || p.SalePrice > 1_000_000_000_000m) throw new ArgumentException("Precio inválido."); }
+    private static void ValidateNote(AgendaNote n) { if (n is null || n.Title is null || n.Content is null || (string.IsNullOrWhiteSpace(n.Title) && string.IsNullOrWhiteSpace(n.Content)) || n.Title.Length > 120 || n.Content.Length > 4000 || (n.Time is not null && !System.Text.RegularExpressions.Regex.IsMatch(n.Time, "^([01][0-9]|2[0-3]):[0-5][0-9]$"))) throw new ArgumentException("Nota inválida."); }
 }
 
 

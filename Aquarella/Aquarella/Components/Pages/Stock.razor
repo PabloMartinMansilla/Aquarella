@@ -4,6 +4,7 @@
 @using System.ComponentModel.DataAnnotations
 
 @inject Aquarella.Services.BusinessData Data
+@implements IDisposable
 
 <PageTitle>Stock · Aquarella</PageTitle>
 <main class="module-page stock-page">
@@ -67,25 +68,31 @@
     private StockTextInput? nameInput;
     private string operationKey = Guid.NewGuid().ToString("N");
     private string? status;
+    private bool disposed;
+    private readonly CancellationTokenSource lifetime = new();
+    public void Dispose() { if (disposed) return; disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (focusName && nameInput is not null) { focusName = false; await nameInput.InputElement.FocusAsync(); }
+        if (disposed) return;
+        if (focusName && nameInput is not null) { focusName = false; try { await nameInput.InputElement.FocusAsync(); } catch (JSDisconnectedException) { } }
         if (!firstRender) return;
         try
         {
-            products = await Data.LoadProductsAsync();
+            var loaded = await Data.LoadProductsAsync(lifetime.Token);
+            if (disposed) return; products = loaded;
             foreach (var product in products) adjustments[product.Id] = 0;
             ready = true;
         }
+        catch (OperationCanceledException) when (disposed) { return; }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { loadFailed = true; status = "No se pudo acceder a los productos guardados. No se sobrescribieron los datos."; }
-        StateHasChanged();
+        if (!disposed) StateHasChanged();
     }
     private void ResetForm(string name = "", int? quantity = null) { form = new() { Name = name, Quantity = quantity }; editContext = new(form); editContext.OnFieldChanged += (_, _) => status = null; focusName = true; }
     private void NewProduct() { editId = null; ResetForm(); editing = true; invoiceOpen = false; status = null; operationKey = Guid.NewGuid().ToString("N"); }
     private void OpenInvoice() { editing = false; invoiceOpen = true; status = null; }
     private void Edit(StockProduct product) { editId = product.Id; ResetForm(product.Name, product.Quantity); editing = true; invoiceOpen = false; status = null; }
-    private async Task ReloadProducts() { products = await Data.LoadProductsAsync(); foreach (var product in products) adjustments.TryAdd(product.Id, 0); }
+    private async Task ReloadProducts() { if (disposed) return; var loaded = await Data.LoadProductsAsync(lifetime.Token); if (disposed) return; products = loaded; foreach (var product in products) adjustments.TryAdd(product.Id, 0); }
     private void Step(Guid id, int step)
     {
         var value = (long)adjustments[id] + step;
@@ -123,9 +130,10 @@
     }
     private async Task<bool> Persist(Func<Task> operation)
     {
-        if (busy || !ready) return false;
+        if (disposed || busy || !ready) return false;
         busy = true;
-        try { await operation(); await ReloadProducts(); return true; }
+        try { await operation(); await ReloadProducts(); return !disposed; }
+        catch (OperationCanceledException) when (disposed) { return false; }
         catch (ValidationException e) { status = e.Message; return false; }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo completar el guardado o actualizar la lista. Revisá la conexión o permisos de la base de datos. Si estabas agregando un producto, podés reintentar la misma carga sin duplicarla."; return false; }
         finally { busy = false; }

@@ -4,18 +4,29 @@ using System.ComponentModel.DataAnnotations;
 namespace Aquarella.Services;
 
 // One saved identity per circuit, backed by a replaceable persistence adapter.
-public sealed class BusinessProfileStore(IBusinessProfilePersistence persistence)
+public sealed class BusinessProfileStore(IBusinessProfilePersistence persistence, ILogger<BusinessProfileStore>? logger = null)
 {
     private BusinessProfile saved = new();
     private Task? initialization;
     public event Action? Changed;
+    public string? LoadWarning { get; private set; }
     public BusinessProfile Load() => saved.Copy();
-    public Task InitializeAsync() => initialization ??= InitializeCoreAsync();
+    public Task InitializeAsync()
+    {
+        if (initialization is null || initialization.IsFaulted || initialization.IsCanceled)
+            initialization = InitializeCoreAsync();
+        return initialization;
+    }
 
     private async Task InitializeCoreAsync()
     {
         var loaded = await persistence.LoadAsync();
-        if (loaded is not null && IsValid(loaded)) saved = loaded.Copy();
+        if (loaded is not null)
+        {
+            saved = loaded.Copy();
+            LoadWarning = IsValid(loaded) ? null : "El perfil guardado contiene campos inválidos. Conservamos los datos; corregilos en Perfil antes de guardar.";
+            if (LoadWarning is not null) logger?.LogWarning("Stored business profile requires correction; original values were retained.");
+        }
         Changed?.Invoke();
     }
 
@@ -25,6 +36,7 @@ public sealed class BusinessProfileStore(IBusinessProfilePersistence persistence
         var snapshot = profile.Copy();
         await persistence.SaveAsync(snapshot);
         saved = snapshot;
+        LoadWarning = null;
         Changed?.Invoke();
     }
 

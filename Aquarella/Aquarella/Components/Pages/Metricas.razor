@@ -6,6 +6,7 @@
 @inject Aquarella.Services.MetricsService Metrics
 @inject Aquarella.Services.BusinessData Data
 @inject IJSRuntime JS
+@inject ILogger<Metricas> Logger
 
 <PageTitle>Métricas · Aquarella</PageTitle>
 <main class="module-page metrics-page" @ref="page">
@@ -97,41 +98,61 @@
     private int revision;
     private ElementReference page;
     private IJSObjectReference? motion;
+    private bool importing;
+    private readonly CancellationTokenSource lifetime = new();
     protected override void OnInitialized() => Data.NoticesChanged += DataChanged;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender) { await Load(); return; }
-        if (!motionPending || disposed) return;
+        if (!motionPending || disposed || importing) return;
         motionPending = false;
         try
         {
-            motion ??= await JS.InvokeAsync<IJSObjectReference>("import", "./metrics-motion.js");
+            if (motion is null)
+            {
+                importing = true;
+                try
+                {
+                    var imported = await JS.InvokeAsync<IJSObjectReference>("import", "./metrics-motion.js");
+                    if (disposed) { await Aquarella.Services.BrowserModuleLifetime.ReleaseAsync(imported); return; }
+                    motion = imported;
+                }
+                finally { importing = false; }
+            }
+            motionPending = false;
             if (!disposed) await motion.InvokeVoidAsync("enter", page);
         }
         catch (Exception e) when (e is JSException or JSDisconnectedException or InvalidOperationException or OperationCanceledException) { /* Presentation only; final values already render without JS. */ }
     }
-    private void DataChanged() => _ = InvokeAsync(Load);
+    private void DataChanged() { if (!disposed) _ = ReloadAfterChange(); }
+    private async Task ReloadAfterChange()
+    {
+        try { if (!disposed) await InvokeAsync(Load); }
+        catch (Exception e) when (disposed && e is OperationCanceledException or ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception e) { Logger.LogWarning(e, "Metrics view refresh failed."); }
+    }
     private async Task Load()
     {
         if (disposed) return;
         if (loading) { pending = true; return; }
         loading = true;
-        do
+        try { do
         {
             pending = false;
-            try { snapshot = await Metrics.LoadAsync(); error = null; revision++; motionPending = true; }
+            try { var loaded = await Metrics.LoadAsync(lifetime.Token); if (!disposed) { snapshot = loaded; error = null; revision++; motionPending = true; } }
+            catch (OperationCanceledException) when (disposed) { }
             catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { error = "Los datos guardados se conservaron. Revisá la conexión e intentá nuevamente."; }
         } while (pending && !disposed);
-        loading = false;
+        } finally { loading = false; }
         if (!disposed) await InvokeAsync(StateHasChanged);
     }
     public async ValueTask DisposeAsync()
     {
-        disposed = true;
+        if (disposed) return;
+        disposed = true; lifetime.Cancel(); lifetime.Dispose();
         Data.NoticesChanged -= DataChanged;
         if (motion is null) return;
-        try { await motion.InvokeVoidAsync("dispose", page); await motion.DisposeAsync(); }
-        catch (Exception e) when (e is JSException or JSDisconnectedException or InvalidOperationException or OperationCanceledException) { }
+        await Aquarella.Services.BrowserModuleLifetime.ReleaseAsync(motion, "dispose", page);
     }
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("es-AR");
     private static string Count(long value) => value.ToString("N0", Culture);

@@ -10,6 +10,17 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using System.Security.Claims;
 
+var transientProfile = new TransientProfilePersistence();
+var profileStore = new BusinessProfileStore(transientProfile);
+try { await profileStore.InitializeAsync(); throw new Exception("Expected transient profile load failure"); }
+catch (IOException) { }
+Check(profileStore.Load().Name == "Aquarella", "failed profile load preserves default identity");
+await profileStore.InitializeAsync();
+Check(profileStore.Load().Name == "Perfil recuperado" && transientProfile.Loads == 2, "profile initialization retries after transient failure");
+await profileStore.InitializeAsync();
+Check(transientProfile.Loads == 2, "successful profile initialization remains cached");
+Console.WriteLine("PASS: profile initialization recovers from transient failure without resetting valid data.");
+
 var path = Path.Combine(Path.GetTempPath(), $"aquarella-verification-{Guid.NewGuid():N}.db");
 var options = new DbContextOptionsBuilder<AquarellaDbContext>().UseSqlite($"Data Source={path}").Options;
 var factory = new Factory(options);
@@ -155,3 +166,11 @@ sealed class EnvironmentStub : IWebHostEnvironment {
 
 sealed class TestAuthentication(ClaimsPrincipal principal) : AuthenticationStateProvider { public override Task<AuthenticationState> GetAuthenticationStateAsync() => Task.FromResult(new AuthenticationState(principal)); }
 sealed class NullEmail : IAccountEmail { public bool Available => true; public Task SendAsync(string recipient, string purpose, string link) => Task.CompletedTask; }
+sealed class TransientProfilePersistence : IBusinessProfilePersistence
+{
+    public int Loads { get; private set; }
+    public Task<BusinessProfile?> LoadAsync() => ++Loads == 1
+        ? Task.FromException<BusinessProfile?>(new IOException("Isolated transient fixture failure"))
+        : Task.FromResult<BusinessProfile?>(new() { Name = "Perfil recuperado" });
+    public Task SaveAsync(BusinessProfile profile) => Task.CompletedTask;
+}

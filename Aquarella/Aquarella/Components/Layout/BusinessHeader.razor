@@ -3,6 +3,7 @@
 @inject Aquarella.Services.BusinessProfileStore ProfileStore
 @inject Aquarella.Services.Accounts.AccountSession Session
 @inject Aquarella.Services.NoticesStore Notices
+@inject ILogger<BusinessHeader> Logger
 
 <header class="business-header">
     <div class="business-title">
@@ -18,7 +19,7 @@
             }
             else
             {
-                @identity.Name.Trim().Substring(0, 1).ToUpperInvariant()
+                @(string.IsNullOrWhiteSpace(identity.Name) ? "A" : identity.Name.Trim()[..1].ToUpperInvariant())
             }
         </a>
     </div>
@@ -47,6 +48,7 @@
         </div>
         </div>
     @if (Session.Notice is not null) { <p class="session-notice" role="status">@Session.Notice</p> }
+    @if (ProfileStore.LoadWarning is not null) { <p class="session-notice" role="status">@ProfileStore.LoadWarning</p> }
 </header>
 
 <div class="drawer-layer @(menuOpen ? "is-open" : "")" inert="@(!menuOpen)">
@@ -86,9 +88,16 @@
         Session.Changed += IdentityChanged;
         Notices.Changed += NoticesChanged;
     }
-    private void IdentityChanged() => _ = InvokeAsync(() => { identity = ProfileStore.Load(); StateHasChanged(); });
-    private void NoticesChanged() => _ = InvokeAsync(StateHasChanged);
-    public void Dispose() { ProfileStore.Changed -= IdentityChanged; Session.Changed -= IdentityChanged; Notices.Changed -= NoticesChanged; }
+    private bool disposed;
+    private void IdentityChanged() { if (!disposed) _ = RenderChanged(); }
+    private void NoticesChanged() { if (!disposed) _ = RenderChanged(); }
+    private async Task RenderChanged()
+    {
+        try { if (!disposed) await InvokeAsync(() => { if (!disposed) { identity = ProfileStore.Load(); StateHasChanged(); } }); }
+        catch (Exception e) when (disposed && e is ObjectDisposedException or InvalidOperationException) { }
+        catch (Exception e) { Logger.LogWarning(e, "Business header refresh failed."); }
+    }
+    public void Dispose() { disposed = true; ProfileStore.Changed -= IdentityChanged; Session.Changed -= IdentityChanged; Notices.Changed -= NoticesChanged; }
     private bool menuOpen;
     private bool focusMenu;
     private string query = string.Empty;
@@ -100,16 +109,18 @@
     private void OpenMenu() { menuOpen = true; focusMenu = true; }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (disposed) return;
         if (firstRender)
         {
             try { await Session.InitializeAsync(); } catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { }
+            if (disposed) return;
             try { await ProfileStore.InitializeAsync(); }
             catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { /* Keep the default identity if browser storage is unavailable. */ }
-            if (Session.IsSignedIn) await Notices.InitializeAsync();
+            if (!disposed && Session.IsSignedIn) await Notices.InitializeAsync();
         }
-        if (focusMenu) { focusMenu = false; await closeButton.FocusAsync(); }
+        if (!disposed && focusMenu) { focusMenu = false; try { await closeButton.FocusAsync(); } catch (JSDisconnectedException) { } }
     }
-    private async Task CloseMenu() { menuOpen = false; await menuButton.FocusAsync(); }
+    private async Task CloseMenu() { if (disposed) return; menuOpen = false; try { await menuButton.FocusAsync(); } catch (JSDisconnectedException) { } }
     private async Task HandleMenuKey(KeyboardEventArgs args)
     {
         if (args.Key == "Escape") await CloseMenu();

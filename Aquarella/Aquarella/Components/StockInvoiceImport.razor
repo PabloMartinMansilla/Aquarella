@@ -73,7 +73,7 @@
     private IBrowserFile? file;
     private string? documentKey, status;
     private string operationKey = "";
-    private bool processing, saving, simulated;
+    private bool processing, saving, simulated, disposed;
     private CancellationTokenSource? cancellation;
     private readonly Draft draft = new();
     private EditContext context = null!;
@@ -92,8 +92,9 @@
     }
     private async Task Process()
     {
-        if (processing || file is null) return;
+        if (disposed || processing || file is null) return;
         processing = true; documentKey = null; status = null; await BusyChanged.InvokeAsync(true);
+        if (disposed) { processing = false; return; }
         using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(20)); cancellation = cancel;
         try
         {
@@ -104,13 +105,13 @@
             buffer.Position = 0;
             var extracted = await Extractor.ExtractAsync(buffer, type, cancel.Token).WaitAsync(cancel.Token);
             if (extracted.Lines.Count is < 1 or > 200) throw new InvoiceExtractionException("No se detectaron productos válidos o el documento supera las 200 líneas. Revisalo antes de continuar.");
-            BeginReview(documentKey, false, extracted.Lines.Select(l => new Row { Name = l.Name, Quantity = l.Quantity, Cost = l.UnitCost }));
+            if (!disposed) BeginReview(documentKey, false, extracted.Lines.Select(l => new Row { Name = l.Name, Quantity = l.Quantity, Cost = l.UnitCost }));
         }
         catch (InvoiceExtractionException e) { status = e.Message; }
         catch (OperationCanceledException) { status = "El procesamiento se canceló o superó el tiempo disponible. Volvé a intentar."; }
         catch (Exception e) when (e is IOException or InvalidOperationException) { documentKey = null; status = "No se pudo procesar el archivo. Volvé a seleccionarlo o probá otro documento."; }
         catch (Exception e) { Logger.LogWarning(e, "Invoice extraction failed"); status = "No se pudo leer el documento. Podés transcribir sus productos o intentar con otro archivo."; }
-        finally { processing = false; cancellation = null; await BusyChanged.InvokeAsync(false); }
+        finally { processing = false; cancellation = null; if (!disposed) await BusyChanged.InvokeAsync(false); }
     }
     private void ManualReview() { if (documentKey is not null) BeginReview(documentKey, false, [new Row()]); }
     private void Demo() => BeginReview("demo:" + Guid.NewGuid().ToString("N"), true, [new Row { Name = "Coca Cola 2,25 L", Quantity = 6, Cost = 3200 }, new Row { Name = "Sprite 2,25 L", Quantity = 4, Cost = 2900 }]);
@@ -129,7 +130,7 @@
     }
     private async Task Confirm()
     {
-        if (saving || stage != Stage.Review) return;
+        if (disposed || saving || stage != Stage.Review) return;
         messages.Clear();
         foreach (var row in draft.Lines)
         {
@@ -143,16 +144,17 @@
         try
         {
             var outcome = await Data.ApplyStockIntakeAsync(draft.Lines.Select(Line).ToList(), operationKey);
+            if (disposed) return;
             await Saved.InvokeAsync();
             stage = Stage.Completed;
             status = outcome.AlreadyApplied ? "Esta carga ya estaba confirmada. No se volvió a sumar Stock." : $"Carga guardada: {outcome.Lines.Count(l => l.Created)} productos nuevos, {outcome.Lines.Count(l => !l.Created)} actualizaciones y {outcome.Lines.Sum(l => (long)l.AddedQuantity)} unidades agregadas.";
         }
         catch (ValidationException e) { status = e.Message; }
         catch (Exception e) when (PersistenceErrors.IsStorageError(e)) { status = "No se pudo completar la confirmación. Podés reintentar: una carga ya guardada no se aplica dos veces."; }
-        finally { saving = false; await BusyChanged.InvokeAsync(false); }
+        finally { saving = false; if (!disposed) await BusyChanged.InvokeAsync(false); }
     }
-    private async Task Close() { if (saving) return; cancellation?.Cancel(); await Closed.InvokeAsync(); }
-    public void Dispose() => cancellation?.Cancel();
+    private async Task Close() { if (disposed || saving) return; cancellation?.Cancel(); await BusyChanged.InvokeAsync(false); await Closed.InvokeAsync(); }
+    public void Dispose() { disposed = true; cancellation?.Cancel(); }
     private sealed class Draft { public List<Row> Lines { get; } = []; }
     private sealed class Row
     {

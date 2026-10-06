@@ -1,5 +1,8 @@
 namespace Aquarella.Models;
 
+public enum PriceField { Cost, DesiredProfitPercent, SalePrice, Suggested }
+public sealed record PriceEdit(Guid ProductId, PriceField Field, decimal Value = 0);
+
 public sealed class ProductPrice
 {
     public Guid ProductId { get; set; }

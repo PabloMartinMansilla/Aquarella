@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using Aquarella.Models
 @inject Aquarella.Services.BusinessProfileStore ProfileStore
+@implements IDisposable
 
 <PageTitle>Perfil del negocio · Aquarella</PageTitle>
 
@@ -92,25 +93,29 @@
     private string? status;
     private string? logoError;
     private bool loadingLogo;
+    private bool disposed;
+    private readonly CancellationTokenSource lifetime = new();
+    public void Dispose() { if (disposed) return; disposed = true; lifetime.Cancel(); lifetime.Dispose(); }
     protected override void OnInitialized() => profile = ProfileStore.Load();
     private bool ready;
     private bool saving;
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender) return;
-        try { await ProfileStore.InitializeAsync(); profile = ProfileStore.Load(); ready = true; }
+        if (!firstRender || disposed) return;
+        try { await ProfileStore.InitializeAsync(); if (!disposed) { profile = ProfileStore.Load(); ready = true; status = ProfileStore.LoadWarning; } }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo acceder al almacenamiento de este navegador."; }
-        StateHasChanged();
+        if (!disposed) StateHasChanged();
     }
     private async Task Save()
     {
+        if (disposed || saving || !ready || loadingLogo) return;
         saving = true;
         // Appearance is edited separately; a business-profile save preserves the saved palette.
         var appearance = ProfileStore.Load();
         profile.PrimaryColor = appearance.PrimaryColor;
         profile.SecondaryColor = appearance.SecondaryColor;
         profile.TertiaryColor = appearance.TertiaryColor;
-        try { await ProfileStore.SaveAsync(profile); status = "Perfil guardado. La identidad del negocio ya está actualizada."; }
+        try { await ProfileStore.SaveAsync(profile); if (!disposed) status = "Perfil guardado. La identidad del negocio ya está actualizada."; }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá el espacio o los conexión o permisos de la base de datos."; }
         finally { saving = false; }
     }
@@ -118,6 +123,8 @@
     private void RemoveLogo() { profile.LogoDataUrl = null; logoError = null; }
     private async Task LoadLogo(InputFileChangeEventArgs args)
     {
+        if (disposed || loadingLogo) return;
+        var token = lifetime.Token;
         logoError = null;
         loadingLogo = true;
         try
@@ -129,12 +136,14 @@
                 return;
             }
             var resized = await file.RequestImageFileAsync("image/png", 400, 400);
+            if (disposed) return;
             await using var stream = resized.OpenReadStream(2 * 1024 * 1024);
             using var buffer = new MemoryStream();
-            await stream.CopyToAsync(buffer);
-            profile.LogoDataUrl = $"data:image/png;base64,{Convert.ToBase64String(buffer.ToArray())}";
+            await stream.CopyToAsync(buffer, token);
+            if (!disposed) profile.LogoDataUrl = $"data:image/png;base64,{Convert.ToBase64String(buffer.ToArray())}";
         }
-        catch (Exception exception) when (exception is IOException or InvalidOperationException or Microsoft.JSInterop.JSException)
+        catch (OperationCanceledException) when (disposed) { }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or Microsoft.JSInterop.JSException or JSDisconnectedException)
         {
             logoError = "No pudimos leer la imagen. Probá con otro archivo.";
         }
