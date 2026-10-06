@@ -82,6 +82,53 @@ try
         Check((await data.LoadPricesAsync()).Single().Cost == 275, "View can save again after database failure");
         view.Dispose();
         Console.WriteLine("PASS Precios: concurrent fields, duplicate events, newest value, validation, manual/suggested price and failure recovery.");
+        var numberView = new Aquarella.Components.Pages.Precios();
+        Set(numberView, "Data", data);
+        foreach (var sample in new (string Input, decimal Value, string Display)[] {
+            ("2", 2m, "2"), ("20", 20m, "20"), ("200", 200m, "200"),
+            ("2000", 2000m, "2.000"), ("20000", 20000m, "20.000"),
+            ("2000,50", 2000.50m, "2.000,50"), ("2.000", 2000m, "2.000"),
+            ("2.000,50", 2000.50m, "2.000,50"), ("2000,501", 2000.501m, "2.000,501") })
+        {
+            foreach (var field in new[] { 0, 2 })
+            {
+                visible = (await data.LoadPricesAsync()).Single();
+                Set(numberView, "prices", new Dictionary<Guid, ProductPrice> { [productId] = visible });
+                await Call(numberView, "Change", visible, field, new ChangeEventArgs { Value = sample.Input });
+                // Blur normalizes display; typing keeps the original text so a comma can be completed.
+                Invoke(numberView, "EndEdit", productId, field);
+                var read = (await second.LoadPricesAsync()).Single();
+                var stored = field == 0 ? read.Cost : read.EffectiveSalePrice;
+                Check(stored == sample.Value, $"Input/persistence/other view: {sample.Input} remains {sample.Value}");
+                var jsonRead = System.Text.Json.JsonSerializer.Deserialize<ProductPrice>(System.Text.Json.JsonSerializer.Serialize(read))!;
+                Check((field == 0 ? jsonRead.Cost : jsonRead.EffectiveSalePrice) == sample.Value, "JSON retains decimal value");
+                Check((string)Invoke(numberView, "InputValue", read, field)! == sample.Display, $"Reload display: {sample.Display}");
+                var previousCulture = System.Globalization.CultureInfo.CurrentCulture;
+                try
+                {
+                    foreach (var culture in new[] { "es-AR", "en-US", "" })
+                    {
+                        System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo(culture);
+                        Check((string)Invoke(numberView, "InputValue", read, field)! == sample.Display, "Presentation is independent of server culture and decimal scale");
+                    }
+                }
+                finally { System.Globalization.CultureInfo.CurrentCulture = previousCulture; }
+            }
+        }
+        visible = (await data.LoadPricesAsync()).Single();
+        await Call(numberView, "Change", visible, 0, new ChangeEventArgs { Value = "2000," });
+        Check((string)Invoke(numberView, "InputValue", visible, 0)! == "2000,", "Typing does not remove the unfinished decimal separator");
+        await Call(numberView, "Change", visible, 0, new ChangeEventArgs { Value = "2000,50" });
+        Invoke(numberView, "EndEdit", productId, 0);
+        foreach (var invalid in new[] { "2.0", "2000.50", "-2", "1000000001" })
+            await Call(numberView, "Change", visible, 0, new ChangeEventArgs { Value = invalid });
+        Check((await data.LoadPricesAsync()).Single().Cost == 2000.50m, "Ambiguous separators, negatives and range errors do not overwrite data");
+        Invoke(numberView, "EndEdit", productId, 0);
+        delay.FailNext = true;
+        await Call(numberView, "Change", visible, 0, new ChangeEventArgs { Value = "3000" });
+        Check((string)Invoke(numberView, "InputValue", Get<Dictionary<Guid, ProductPrice>>(numberView, "prices")[productId], 0)! == "2.000,50", "Failed save clears display draft and restores persisted price");
+        numberView.Dispose();
+        Console.WriteLine("PASS formato Precios: 2/20/200/2000/20000, decimal comma, grouped input, both cost/sale fields, SQLite/JSON/second reader/display, unfinished input and SQL failure.");
         await using (var db = factory.CreateDbContext())
         {
             var business = await db.Businesses.SingleAsync(b => b.UserId == userId);
@@ -151,6 +198,7 @@ try
 finally { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); File.Delete(path); }
 static void Check(bool value, string message) { if (!value) throw new Exception(message); }
 static Task Call(object target, string name, params object[] args) => (Task)target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args)!;
+static object? Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
 static void Set(object target, string name, object value) { var type = target.GetType(); var property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic); if (property is not null) property.SetValue(target, value); else type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value); }
 static T Get<T>(object target, string name) => (T)target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
 sealed class DelayedWrite : DbCommandInterceptor
