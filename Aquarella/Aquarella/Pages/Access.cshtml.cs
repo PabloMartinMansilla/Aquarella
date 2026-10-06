@@ -56,7 +56,7 @@ public sealed class AccessModel(AccountService accounts, IWebHostEnvironment env
             if (!AccountService.ValidPassword(Password)) ModelState.AddModelError(nameof(Password), "Usá entre 12 y 256 caracteres. Podés usar una frase larga.");
             if (!string.Equals(Password, Confirmation, StringComparison.Ordinal)) ModelState.AddModelError(nameof(Confirmation), "Las contraseñas no coinciden.");
         }
-        if (Flow == "login" && (Password.Length == 0 || Password.Length > 256)) ModelState.AddModelError(nameof(Password), "Ingresá tu contraseña.");
+        if (Flow == "login" && (string.IsNullOrEmpty(Password) || Password.Length > 256)) ModelState.AddModelError(nameof(Password), "Ingresá tu contraseña.");
         if (!ModelState.IsValid) return Page();
         try {
             switch (Flow) {

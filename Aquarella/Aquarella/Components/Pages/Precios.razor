@@ -25,7 +25,7 @@
                     {
                         var price = prices[product.Id];
                         <tr @key="product.Id">
-                            <th scope="row">@product.Name</th>
+                            <th scope="row"><div class="price-product"><ProductThumbnail Product="product" /><span>@product.Name</span></div></th>
                             <td><input type="text" inputmode="decimal" lang="es-AR" value="@InputValue(price, 0)" aria-label="Precio de compra de @product.Name" @oninput="e => Change(price, 0, e)" @onblur="() => EndEdit(price.ProductId, 0)" /></td>
                             <td><input type="text" inputmode="decimal" lang="es-AR" value="@InputValue(price, 1)" aria-label="Porcentaje de ganancia de @product.Name" @oninput="e => Change(price, 1, e)" @onblur="() => EndEdit(price.ProductId, 1)" /></td>
                             <td class="calculated">@Money(price.SuggestedPrice)</td>

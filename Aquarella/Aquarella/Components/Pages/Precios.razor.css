@@ -21,3 +21,6 @@ input:focus-visible, button:focus-visible, .table-container:focus-visible { outl
     .reset-button { min-height: 44px; padding: 8px 4px; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
     small { font-size: 12px; }
 }
+
+.price-product { display: flex; align-items: center; gap: 10px; }
+.price-product span { min-width: 0; }

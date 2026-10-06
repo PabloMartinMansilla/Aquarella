@@ -44,7 +44,7 @@ builder.Services.AddRazorPages(options => {
 builder.Services.AddRateLimiter(options => {
     options.RejectionStatusCode = 429;
     options.AddPolicy("accounts", context => HttpMethods.IsPost(context.Request.Method)
-        ? RateLimitPartition.GetFixedWindowLimiter($"{context.Connection.RemoteIpAddress}:{context.Request.Path}", _ => new FixedWindowRateLimiterOptions { PermitLimit = 12, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })
+        ? RateLimitPartition.GetFixedWindowLimiter($"{context.Connection.RemoteIpAddress}:{context.Request.Path.Value?.TrimEnd('/').ToLowerInvariant()}", _ => new FixedWindowRateLimiterOptions { PermitLimit = 12, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 })
         : RateLimitPartition.GetNoLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "local"));
     options.OnRejected = async (context, token) => { context.HttpContext.Response.Headers.RetryAfter = "60"; await context.HttpContext.Response.WriteAsync("Demasiados intentos. Esperá un minuto y volvé a intentar.", token); };
 });
@@ -76,6 +76,16 @@ using (var scope = app.Services.CreateScope()) {
 }
 
 // Configure the HTTP request pipeline.
+// Apply to successful pages, rejected requests and error responses without restricting Blazor scripts.
+app.Use(async (context, next) => {
+    context.Response.OnStarting(() => {
+        context.Response.Headers["Content-Security-Policy"] = "frame-ancestors 'none'";
+        context.Response.Headers["X-Frame-Options"] = "DENY";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return Task.CompletedTask;
+    });
+    await next();
+});
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler(error => error.Run(async context => {

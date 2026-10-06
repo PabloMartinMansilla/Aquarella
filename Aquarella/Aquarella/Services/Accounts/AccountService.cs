@@ -17,8 +17,8 @@ public sealed class AccountService(IDbContextFactory<AquarellaDbContext> factory
     private static readonly User dummy = new();
     private static readonly string dummyHash = new PasswordHasher<User>().HashPassword(dummy, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
     public static string Normalize(string email) => email.Trim().ToUpperInvariant();
-    public static bool ValidEmail(string value) => value.Trim().Length <= 254 && new EmailAddressAttribute().IsValid(value.Trim());
-    public static bool ValidPassword(string value) => value.Length is >= 12 and <= 256;
+    public static bool ValidEmail(string? value) => !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= 254 && new EmailAddressAttribute().IsValid(value.Trim());
+    public static bool ValidPassword(string? value) => value is { Length: >= 12 and <= 256 };
     public async Task<User?> FindAsync(string address) {
         await using var db = await factory.CreateDbContextAsync(); var normalized = Normalize(address);
         return await db.Users.AsNoTracking().SingleOrDefaultAsync(u => u.NormalizedEmail == normalized);

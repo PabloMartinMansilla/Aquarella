@@ -1,0 +1,22 @@
+@using Aquarella.Models
+@using Aquarella.Services
+
+<span class="product-thumbnail @(assetLoaded && !assetFailed ? "is-ready" : null)" aria-hidden="true" data-product-type="@visual.Type" data-product-variant="@visual.Variant">
+    <span class="product-thumbnail-backup"></span>
+    <img @key="visual.Asset" src="@Assets[visual.Asset]" class="@(assetLoaded ? "is-loaded" : null)" @onload="AssetLoaded" width="112" height="112" alt="" loading="lazy" decoding="async" @onerror="AssetFailed" hidden="@assetFailed" />
+</span>
+
+@code {
+    [Parameter, EditorRequired] public StockProduct Product { get; set; } = null!;
+    private ProductVisual visual;
+    private bool assetFailed, assetLoaded;
+
+    protected override void OnParametersSet()
+    {
+        var next = ProductVisualResolver.Resolve(Product);
+        if (next != visual) { assetFailed = false; assetLoaded = false; }
+        visual = next;
+    }
+    private void AssetLoaded() => assetLoaded = true;
+    private void AssetFailed() => assetFailed = true;
+}

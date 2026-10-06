@@ -39,3 +39,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--secondary);
     .adjustment-controls .primary-button { grid-column: 1 / -1; }
     .delete-confirm button { min-height: 44px; }
 }
+
+.product-info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.product-description { min-width: 0; }

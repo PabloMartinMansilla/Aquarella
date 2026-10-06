@@ -33,7 +33,7 @@
         @foreach (var product in products)
         {
             <article class="product-row" @key="product.Id">
-                <div class="product-info"><h2>@product.Name</h2><p>Cantidad actual: <strong>@product.Quantity</strong></p></div>
+                <div class="product-info"><ProductThumbnail Product="product" /><div class="product-description"><h2>@product.Name</h2><p>Cantidad actual: <strong>@product.Quantity</strong></p></div></div>
                 <div class="adjustment">
                     <label for="adjust-@product.Id">Ajuste de cantidad</label>
                     <div class="adjustment-controls">
