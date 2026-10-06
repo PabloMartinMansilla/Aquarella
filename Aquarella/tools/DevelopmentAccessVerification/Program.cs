@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 var production = args.Contains("--production");
-var origin = production ? "https://localhost:7190" : "https://localhost:7188";
+var origin = Environment.GetEnvironmentVariable("AQUARELLA_VERIFICATION_URL") ?? (production ? "https://localhost:7190" : "https://localhost:7188");
 var dbPath = Path.GetFullPath("Aquarella/Aquarella/App_Data/development-access-verification.db");
 var before = production ? "" : await Snapshot();
 using var client = new HttpClient(new HttpClientHandler { CookieContainer = new CookieContainer(), AllowAutoRedirect = false }) { BaseAddress = new Uri(origin) };

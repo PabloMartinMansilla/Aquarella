@@ -68,9 +68,20 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
         await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
         return (await db.Businesses.AsNoTracking().SingleAsync(b => b.Id == id)).Profile;
     }
-    public async Task SaveProfileAsync(BusinessProfile profile) {
+    public async Task<BusinessProfile> SaveProfileAsync(BusinessProfile profile, BusinessProfile original) {
+        if (profile is null || original is null || !BusinessProfileStore.IsValid(profile)) throw new ValidationException("El perfil contiene datos inválidos.");
+        var edited = profile.Copy();
+        var baseline = original.Copy();
         await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(); var id = await BusinessId(db);
-        var b = await db.Businesses.SingleAsync(b => b.Id == id); db.Entry(b.Profile).CurrentValues.SetValues(profile); b.UpdatedAt = DateTime.UtcNow; await db.SaveChangesAsync();
+        // A SQLite write transaction keeps read/merge/validation/commit together across circuits.
+        await using var tx = await db.Database.BeginTransactionAsync();
+        var b = await db.Businesses.SingleAsync(b => b.Id == id);
+        var merged = BusinessProfileChanges.Merge(baseline, edited, b.Profile);
+        if (!BusinessProfileStore.IsValid(merged)) throw new ValidationException("El perfil contiene datos inválidos.");
+        db.Entry(b.Profile).CurrentValues.SetValues(merged);
+        b.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(); await tx.CommitAsync();
+        return b.Profile.Copy();
     }
     public async Task<List<StockProduct>> LoadProductsAsync(CancellationToken cancellationToken = default) {
         await EnsureImportedAsync(); await using var db = await factory.CreateDbContextAsync(cancellationToken); var id = await BusinessId(db);
@@ -105,7 +116,21 @@ public sealed class BusinessData(IDbContextFactory<AquarellaDbContext> factory, 
         await using var tx = await db.Database.BeginTransactionAsync();
         var receipt = await db.StockIntakeReceipts.SingleOrDefaultAsync(r => r.BusinessId == id && r.OperationKey == operationKey);
         if (receipt is not null)
-            return new(System.Text.Json.JsonSerializer.Deserialize<List<StockIntakeResult>>(receipt.ResultsJson)!, true);
+        {
+            try
+            {
+                var results = System.Text.Json.JsonSerializer.Deserialize<List<StockIntakeResult>>(receipt.ResultsJson);
+                if (results is null || results.Count is < 1 or > 200 || results.Any(r => r is null || r.ProductId == Guid.Empty
+                    || string.IsNullOrWhiteSpace(r.Name) || r.AddedQuantity < 0 || r.FinalQuantity < r.AddedQuantity))
+                    throw new System.Text.Json.JsonException("Invalid saved stock receipt.");
+                return new(results, true);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                logger?.LogWarning("A saved stock receipt could not be read. Original data and confirmed stock were retained.");
+                throw new ValidationException("Esta carga ya fue confirmada, pero su comprobante no se puede leer. No se volvió a aplicar. Revisá los productos antes de continuar.");
+            }
+        }
         var products = await db.Products.Where(p => p.BusinessId == id).ToListAsync();
         var plan = StockIntakePlanner.Plan(products.Select(p => new StockIntakeItem(p.Id, p.Name, p.Quantity)), lines);
         for (var i = 0; i < plan.Count; i++)

@@ -172,5 +172,5 @@ sealed class TransientProfilePersistence : IBusinessProfilePersistence
     public Task<BusinessProfile?> LoadAsync() => ++Loads == 1
         ? Task.FromException<BusinessProfile?>(new IOException("Isolated transient fixture failure"))
         : Task.FromResult<BusinessProfile?>(new() { Name = "Perfil recuperado" });
-    public Task SaveAsync(BusinessProfile profile) => Task.CompletedTask;
+    public Task<BusinessProfile> SaveAsync(BusinessProfile profile, BusinessProfile original) => Task.FromResult(profile.Copy());
 }

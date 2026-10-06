@@ -101,13 +101,17 @@ public sealed class AccountService(IDbContextFactory<AquarellaDbContext> factory
         await context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)), new AuthenticationProperties { IsPersistent = remember, ExpiresUtc = new DateTimeOffset(row.ExpiresAt, TimeSpan.Zero), AllowRefresh = false });
     }
     public async Task<bool> IsSessionValidAsync(ClaimsPrincipal principal) {
+        if (principal.Identity?.IsAuthenticated != true) return false;
         if (!Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var userId) || !Guid.TryParse(principal.FindFirstValue("sid"), out var sessionId)) return false;
         await using var db = await factory.CreateDbContextAsync();
         // SQLite cannot order DateTimeOffset. UTC DateTime is used consistently.
         return await db.AccountLoginSessions.AnyAsync(s => s.Id == sessionId && s.UserId == userId && s.ExpiresAt > DateTime.UtcNow);
     }
     public async Task SignOutAsync(HttpContext context) {
-        if (Guid.TryParse(context.User.FindFirstValue("sid"), out var id)) { await using var db = await factory.CreateDbContextAsync(); await db.AccountLoginSessions.Where(s => s.Id == id).ExecuteDeleteAsync(); }
+        if (context.User.Identity?.IsAuthenticated == true && Guid.TryParse(context.User.FindFirstValue("sid"), out var id) && Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)) {
+            await using var db = await factory.CreateDbContextAsync();
+            await db.AccountLoginSessions.Where(s => s.Id == id && s.UserId == userId).ExecuteDeleteAsync();
+        }
         await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     }
 }

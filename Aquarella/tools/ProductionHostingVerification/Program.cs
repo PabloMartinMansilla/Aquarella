@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Aquarella.Data;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -53,8 +54,20 @@ try {
         var user = new User { Username = "hosting-verification", Email = "hosting@example.test", NormalizedEmail = "HOSTING@EXAMPLE.TEST", EmailVerified = true };
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, "Isolated fixture password 123");
         var business = new Business { User = user, LegacyImported = true };
+        business.Profile.Name = "Hosting Business A";
+        business.Profile.Description = "Restart fixture";
+        business.Profile.PrimaryColor = "#F4EFE9";
+        business.Profile.LogoDataUrl = "data:image/png;base64,aGVsbG8=";
+        user.HasCompletedOnboarding = true;
+        user.AiSettingsJson = Aquarella.Services.AiSettingsCodec.Write(new() { AiCustomInstructions = "Restart preference A" });
         db.Users.Add(user); db.Businesses.Add(business);
-        db.Products.Add(new Product { Business = business, Name = "Persisted fixture", Quantity = 7 });
+        db.Products.Add(new Product { Business = business, Name = "Persisted fixture", Quantity = 7, Cost = 2000.50m, DesiredProfitPercent = 35m, SalePrice = 3000.75m, ManualSalePrice = true });
+        db.CalendarEntries.Add(new() { Business = business, Date = new(2026, 10, 15), Title = "Restart agenda A", Content = "Restart content", Time = "15:30" });
+        var otherUser = new User { Username = "hosting-other", Email = "hosting-other@example.test", NormalizedEmail = "HOSTING-OTHER@EXAMPLE.TEST", EmailVerified = true };
+        otherUser.PasswordHash = new PasswordHasher<User>().HashPassword(otherUser, "Isolated fixture password 123");
+        var otherBusiness = new Business { User = otherUser, LegacyImported = true };
+        otherBusiness.Profile.Name = "Hosting Business B";
+        db.Businesses.Add(otherBusiness); db.Products.Add(new() { Business = otherBusiness, Name = "Exclusive B fixture", Quantity = 31, Cost = 20.25m });
         await db.SaveChangesAsync();
     }
     html = await (await Send("GET", "/login")).Content.ReadAsStringAsync();
@@ -74,16 +87,28 @@ try {
         "different client IP is not throttled by previous client");
     var keyFiles = Directory.GetFiles(keys, "*.xml");
     Check(keyFiles.Length > 0, "Data Protection key generated on persistent path");
+    string beforeRestart;
+    await using (var db = new AquarellaDbContext(options)) beforeRestart = await BusinessSnapshot(db);
     await Stop(); await Start();
     Check((await Send("GET", "/")).IsSuccessStatusCode, "authentication cookie survives process restart");
     Check(keyFiles.All(File.Exists), "Data Protection keys preserved");
     await using (var db = new AquarellaDbContext(options)) {
         Check(await db.Products.AnyAsync(p => p.Name == "Persisted fixture" && p.Quantity == 7), "SQLite data survives process restart");
         Check((await db.Database.GetAppliedMigrationsAsync()).Count() == db.Database.GetMigrations().Count(), "restart does not re-create schema");
+        Check(await BusinessSnapshot(db) == beforeRestart, "all business/profile/pricing/agenda/AI/tutorial data survive real server restart exactly");
     }
     html = await (await Send("GET", "/mi-cuenta")).Content.ReadAsStringAsync();
     Check((await Send("POST", "/mi-cuenta?handler=Logout", new() { ["__RequestVerificationToken"] = Token(html) })).StatusCode == HttpStatusCode.Redirect, "logout");
     Check((await Send("GET", "/stock")).StatusCode == HttpStatusCode.Redirect, "routes protected after logout");
+    foreach (var address in new[] { "hosting-other@example.test", "hosting@example.test" })
+    {
+        html = await (await Send("GET", "/login")).Content.ReadAsStringAsync();
+        Check((await Send("POST", "/login", new() { ["__RequestVerificationToken"] = Token(html), ["Email"] = address, ["Password"] = "Isolated fixture password 123" })).StatusCode == HttpStatusCode.Redirect, "A/B re-login with real cookies");
+        html = await (await Send("GET", "/mi-cuenta")).Content.ReadAsStringAsync();
+        var foreignAddress = address == "hosting@example.test" ? "hosting-other@example.test" : "hosting@example.test";
+        Check(html.Contains(address) && !html.Contains(foreignAddress), "account page contains only current user after A/B switch");
+        Check((await Send("POST", "/mi-cuenta?handler=Logout", new() { ["__RequestVerificationToken"] = Token(html) })).StatusCode == HttpStatusCode.Redirect, "A/B logout");
+    }
     await Stop(); await Start(trusted: false);
     Check((await Send("GET", "/login")).StatusCode == HttpStatusCode.BadRequest, "untrusted proxy headers ignored");
     Console.WriteLine("PASS: PORT, health, trusted/untrusted proxy, IP rate limiting, Login, protected routes, CSRF, Production bypass rejection, unavailable email, migrations, real cookies, restart persistence and logout.");
@@ -96,6 +121,14 @@ try {
     Console.Error.WriteLine("Private isolated logs: " + logPath);
     Environment.ExitCode = 1;
 } finally { await Stop(); }
+
+static async Task<string> BusinessSnapshot(AquarellaDbContext db) => JsonSerializer.Serialize(new {
+    Users = await db.Users.AsNoTracking().OrderBy(u => u.Id).Select(u => new { u.Id, u.Username, u.HasCompletedOnboarding, u.AiSettingsJson }).ToListAsync(),
+    Businesses = await db.Businesses.AsNoTracking().OrderBy(b => b.Id).Select(b => new { b.Id, b.UserId, b.LegacyImported, b.Profile }).ToListAsync(),
+    Products = await db.Products.AsNoTracking().OrderBy(p => p.Id).Select(p => new { p.Id, p.BusinessId, p.Name, p.Quantity, p.Cost, p.DesiredProfitPercent, p.SalePrice, p.ManualSalePrice }).ToListAsync(),
+    Notes = await db.CalendarEntries.AsNoTracking().OrderBy(n => n.Id).Select(n => new { n.Id, n.BusinessId, n.Date, n.Title, n.Content, n.Time }).ToListAsync(),
+    Receipts = await db.StockIntakeReceipts.AsNoTracking().OrderBy(r => r.Id).Select(r => new { r.Id, r.BusinessId, r.OperationKey, r.ResultsJson }).ToListAsync()
+});
 
 async Task<HttpResponseMessage> Send(string method, string path, Dictionary<string, string>? fields = null, bool forwarded = true, string proxyClientIp = "198.51.100.10", string host = "localhost") {
     using var request = new HttpRequestMessage(new HttpMethod(method), path);

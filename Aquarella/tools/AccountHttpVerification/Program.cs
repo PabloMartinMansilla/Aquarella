@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-var origin = "https://localhost:7188";
+var origin = Environment.GetEnvironmentVariable("AQUARELLA_VERIFICATION_URL") ?? "https://localhost:7188";
 var outbox = Path.GetFullPath("Aquarella/Aquarella/App_Data/development-emails");
 var address = $"account-{Guid.NewGuid():N}@example.test";
 const string password = "Una frase de prueba 123";

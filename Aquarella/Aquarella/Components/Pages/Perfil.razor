@@ -90,6 +90,7 @@
 
 @code {
     private BusinessProfile profile = new();
+    private BusinessProfile original = new();
     private string? status;
     private string? logoError;
     private bool loadingLogo;
@@ -102,7 +103,7 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || disposed) return;
-        try { await ProfileStore.InitializeAsync(); if (!disposed) { profile = ProfileStore.Load(); ready = true; status = ProfileStore.LoadWarning; } }
+        try { await ProfileStore.InitializeAsync(); if (!disposed) { profile = ProfileStore.Load(); original = profile.Copy(); ready = true; status = ProfileStore.LoadWarning; } }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo acceder al almacenamiento de este navegador."; }
         if (!disposed) StateHasChanged();
     }
@@ -111,11 +112,10 @@
         if (disposed || saving || !ready || loadingLogo) return;
         saving = true;
         // Appearance is edited separately; a business-profile save preserves the saved palette.
-        var appearance = ProfileStore.Load();
-        profile.PrimaryColor = appearance.PrimaryColor;
-        profile.SecondaryColor = appearance.SecondaryColor;
-        profile.TertiaryColor = appearance.TertiaryColor;
-        try { await ProfileStore.SaveAsync(profile); if (!disposed) status = "Perfil guardado. La identidad del negocio ya está actualizada."; }
+        profile.PrimaryColor = original.PrimaryColor;
+        profile.SecondaryColor = original.SecondaryColor;
+        profile.TertiaryColor = original.TertiaryColor;
+        try { await ProfileStore.SaveAsync(profile, original); if (!disposed) { profile = ProfileStore.Load(); original = profile.Copy(); status = "Perfil guardado. La identidad del negocio ya está actualizada."; } }
         catch (Exception e) when (Aquarella.Services.PersistenceErrors.IsStorageError(e)) { status = "No se pudo guardar. Revisá el espacio o los conexión o permisos de la base de datos."; }
         finally { saving = false; }
     }

@@ -30,12 +30,13 @@ public sealed class BusinessProfileStore(IBusinessProfilePersistence persistence
         Changed?.Invoke();
     }
 
-    public async Task SaveAsync(BusinessProfile profile)
+    public async Task SaveAsync(BusinessProfile profile, BusinessProfile? original = null)
     {
-        if (!IsValid(profile)) throw new ValidationException("El perfil contiene datos inválidos.");
+        if (profile is null || !IsValid(profile)) throw new ValidationException("El perfil contiene datos inválidos.");
         var snapshot = profile.Copy();
-        await persistence.SaveAsync(snapshot);
-        saved = snapshot;
+        await InitializeAsync();
+        var baseline = (original ?? saved).Copy();
+        saved = (await persistence.SaveAsync(snapshot, baseline)).Copy();
         LoadWarning = null;
         Changed?.Invoke();
     }

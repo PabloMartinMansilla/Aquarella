@@ -8,9 +8,10 @@ public sealed class DatabaseBusinessProfilePersistence(BusinessData data, IJSRun
         await DisplayAsync(profile);
         return profile;
     }
-    public async Task SaveAsync(BusinessProfile profile) {
-        await data.SaveProfileAsync(profile);
-        await DisplayAsync(profile);
+    public async Task<BusinessProfile> SaveAsync(BusinessProfile profile, BusinessProfile original) {
+        var actual = await data.SaveProfileAsync(profile, original);
+        await DisplayAsync(actual);
+        return actual;
     }
     private async Task DisplayAsync(BusinessProfile profile)
     {

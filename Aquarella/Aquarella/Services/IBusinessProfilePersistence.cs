@@ -5,5 +5,5 @@ namespace Aquarella.Services;
 public interface IBusinessProfilePersistence
 {
     Task<BusinessProfile?> LoadAsync();
-    Task SaveAsync(BusinessProfile profile);
+    Task<BusinessProfile> SaveAsync(BusinessProfile profile, BusinessProfile original);
 }
