@@ -17,6 +17,10 @@ App_Data/
 *.sqlite3-wal
 *.sqlite3-journal
 *.log
+*.maintenance.lock
+*.migration-result.json
+migration-backups/
+backups/
 .env
 .env.*
 data-protection-keys/

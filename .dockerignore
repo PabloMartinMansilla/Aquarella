@@ -4,6 +4,9 @@
 !Aquarella/
 !Aquarella/Aquarella/
 !Aquarella/Aquarella/**
+!Aquarella/tools/
+!Aquarella/tools/DatabaseMaintenance/
+!Aquarella/tools/DatabaseMaintenance/**
 **/.git
 **/.vs
 **/bin
@@ -11,6 +14,15 @@
 **/App_Data
 **/*.db
 **/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/*.sqlite3
+**/*.sqlite3-*
+**/*.log
+**/*.maintenance.lock
+**/*.migration-result.json
+**/backups
+**/migration-backups
 **/.env
 **/.env.*
 **/*.csproj.user
@@ -21,4 +33,3 @@
 **/production-data
 **/appsettings.Development.json
 **/Properties/launchSettings.json
-**/tools

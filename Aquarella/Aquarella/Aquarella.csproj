@@ -13,6 +13,8 @@
     <Content Remove="App_Data/**;production-data/**;data-protection-keys/**;.env;.env.*;**/*.pfx;**/*.pem;**/*.key" />
     <None Remove="App_Data/**;production-data/**;data-protection-keys/**;.env;.env.*;**/*.pfx;**/*.pem;**/*.key" />
     <Content Update="appsettings.Development.json" CopyToPublishDirectory="Never" />
+    <Content Remove="**/*.db;**/*.db-*;**/*.sqlite;**/*.sqlite-*;**/*.sqlite3;**/*.sqlite3-*;**/*.maintenance.lock;**/*.migration-result.json;backups/**;migration-backups/**" />
+    <None Remove="**/*.db;**/*.db-*;**/*.sqlite;**/*.sqlite-*;**/*.sqlite3;**/*.sqlite3-*;**/*.maintenance.lock;**/*.migration-result.json;backups/**;migration-backups/**" />
   </ItemGroup>
 
   <ItemGroup>

@@ -21,6 +21,7 @@ public sealed class AccountToken
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public string Purpose { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime ExpiresAt { get; set; }
     public DateTime? UsedAt { get; set; }
 }
@@ -29,6 +30,21 @@ public sealed class AccountLoginSession
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public DateTime ExpiresAt { get; set; }
+}
+// Durable security notification; no password, raw token, link, or SMTP secret.
+public sealed class AccountEmailNotification
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public string Purpose { get; set; } = "password-changed";
+    public Guid? TokenId { get; set; }
+    public string? PublicOrigin { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastAttemptAt { get; set; }
+    public DateTime? LeaseUntil { get; set; }
+    public DateTime? SentAt { get; set; }
+    public DateTime? CancelledAt { get; set; }
+    public int Attempts { get; set; }
 }
 public sealed class Business
 {

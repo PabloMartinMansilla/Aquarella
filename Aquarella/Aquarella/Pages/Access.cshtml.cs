@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Aquarella.Pages;
 [AllowAnonymous]
-public sealed class AccessModel(AccountService accounts, IWebHostEnvironment environment, ILogger<AccessModel> logger, IConfiguration configuration, DevelopmentAccess developmentAccess, IAccountEmail emailProvider) : PageModel
+public sealed class AccessModel(AccountService accounts, IWebHostEnvironment environment, ILogger<AccessModel> logger, IConfiguration configuration, DevelopmentAccess developmentAccess, IAccountEmail emailProvider, AccountRegistrationPolicy registration) : PageModel
 {
     [BindProperty] public string FirstName { get; set; } = "";
     [BindProperty] public string LastName { get; set; } = "";
@@ -15,36 +15,42 @@ public sealed class AccessModel(AccountService accounts, IWebHostEnvironment env
     [BindProperty] public bool Remember { get; set; }
     [BindProperty(SupportsGet = true)] public string? Token { get; set; }
     [BindProperty(SupportsGet = true)] public string? Legacy { get; set; }
-    public string Flow => Request.Path.Value!.Trim('/');
+    public string Flow => Request.Path.Value!.Trim('/').ToLowerInvariant();
     public bool Success { get; private set; }
+    public bool VerificationReady { get; private set; }
     public string? Message { get; private set; }
     public bool Development => environment.IsDevelopment();
     public bool EmailAvailable => emailProvider.Available;
+    public bool RegistrationEnabled => registration.Enabled;
     public string Title => Flow switch { "crear-cuenta" => "Crear cuenta", "verificar-email" => "Verificá tu correo", "verificar-correo" => "Verificar correo", "recuperar-contrasena" => "Recuperar contraseña", "nueva-contrasena" => "Crear nueva contraseña", _ => "Iniciar sesión" };
-    private string Origin {
-        get {
-            if (Uri.TryCreate(configuration["Accounts:PublicOrigin"], UriKind.Absolute, out var origin) && origin.Scheme == "https") return origin.GetLeftPart(UriPartial.Authority);
-            if (Development && Request.Host.Host == "localhost") return $"{Request.Scheme}://{Request.Host}";
-            throw new InvalidOperationException("Configurá Accounts:PublicOrigin con la URL HTTPS pública.");
-        }
-    }
+    private string Origin => AccountMailOrigin.FromRequest(configuration, environment, Request);
     public async Task<IActionResult> OnGetAsync() {
+        if (Flow == "crear-cuenta" && !RegistrationEnabled) { Message = AccountRegistrationPolicy.ClosedMessage; return Page(); }
         if (!EmailAvailable && Flow is "crear-cuenta" or "verificar-email" or "recuperar-contrasena")
             Message = "El servicio de correo todavía no está disponible. El registro y la recuperación de contraseña estarán disponibles cuando se configure.";
         if (Flow == "verificar-email") Email = TempData.Peek("RegistrationEmail") as string ?? "";
         if (Flow == "login" && User.Identity?.IsAuthenticated == true) return Redirect("/");
         if (Flow == "crear-cuenta" && Legacy is not null && (!Development || !await accounts.TokenValidAsync(Legacy, "legacy"))) { Message = "El enlace de vinculación no es válido o venció."; }
-        if (Flow == "verificar-correo") { Success = await accounts.ConsumeAsync(Token ?? "", "verify"); Message = Success ? "Correo verificado correctamente" : "El enlace no es válido, ya fue utilizado o venció."; }
+        if (Flow == "verificar-correo") {
+            VerificationReady = await accounts.TokenValidAsync(Token ?? "", "verify");
+            Message = VerificationReady ? null : "El enlace no es válido, ya fue utilizado o venció.";
+        }
         if (Flow == "nueva-contrasena" && !await accounts.TokenValidAsync(Token ?? "", "reset")) Message = "El enlace no es válido, ya fue utilizado o venció.";
         return Page();
     }
     public async Task<IActionResult> OnPostAsync() {
+        if (Flow == "crear-cuenta" && !RegistrationEnabled) { Message = AccountRegistrationPolicy.ClosedMessage; return Page(); }
         if (!EmailAvailable && Flow is "crear-cuenta" or "verificar-email" or "recuperar-contrasena") {
             Message = "El servicio de correo todavía no está disponible. No se realizó ningún cambio ni se enviaron enlaces.";
             return Page();
         }
         // Required fields vary by flow; optional form fields are intentionally excluded.
         ModelState.Clear();
+        if (Flow is "crear-cuenta" or "verificar-email" or "recuperar-contrasena") {
+            // Configuration failures must behave identically for existing and unknown addresses.
+            try { _ = Origin; }
+            catch (InvalidOperationException) { Message = "El servicio de correo no está configurado correctamente. No se enviaron enlaces."; return Page(); }
+        }
         if (Flow is "login" or "crear-cuenta" or "recuperar-contrasena" or "verificar-email") {
             if (!AccountService.ValidEmail(Email)) ModelState.AddModelError(nameof(Email), "Ingresá un correo electrónico válido.");
         }
@@ -67,15 +73,19 @@ public sealed class AccessModel(AccountService accounts, IWebHostEnvironment env
                 case "crear-cuenta":
                     if (Legacy is not null && !Development) { Message = "Enlace no válido."; return Page(); }
                     var result = await accounts.RegisterAsync(FirstName, LastName, Email, Password, Legacy);
-                    if (result.User is null) { ModelState.AddModelError(nameof(Email), result.Error!); return Page(); }
-                    await TrySend(result.User, "verify");
-                    TempData["RegistrationEmail"] = result.User.Email;
+                    if (result.User is null && result.Error != "Este correo ya pertenece a una cuenta.") { ModelState.AddModelError(nameof(Email), result.Error!); return Page(); }
+                    if (result.User is not null) await TrySend(result.User, "verify");
+                    TempData["RegistrationEmail"] = Email.Trim();
                     return Redirect("/verificar-email");
                 case "recuperar-contrasena":
                 case "verificar-email":
                     var existing = await accounts.FindAsync(Email);
                     if (existing?.PasswordHash is not null && (Flow != "verificar-email" || !existing.EmailVerified)) await TrySend(existing, Flow == "verificar-email" ? "verify" : "reset");
-                    Success = true; Message = Flow == "verificar-email" ? "Si corresponde, recibirás un nuevo enlace de verificación." : "Si existe una cuenta asociada a ese correo, recibirás un enlace para restablecer tu contraseña.";
+                    Success = true; Message = Flow == "verificar-email" ? "Si corresponde, se procesará el envío de un nuevo enlace de verificación. Si no llega, podés volver a solicitarlo más tarde." : "Si existe una cuenta asociada a ese correo, se procesará el envío de instrucciones para recuperar tu contraseña. Si no llegan, podés volver a solicitarlas más tarde.";
+                    return Page();
+                case "verificar-correo":
+                    Success = await accounts.ConsumeAsync(Token ?? "", "verify");
+                    Message = Success ? "Correo verificado correctamente" : "El enlace no es válido, ya fue utilizado o venció.";
                     return Page();
                 case "nueva-contrasena":
                     Success = await accounts.ConsumeAsync(Token ?? "", "reset", Password);

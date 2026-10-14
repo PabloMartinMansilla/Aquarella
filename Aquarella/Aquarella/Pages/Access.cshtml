@@ -5,13 +5,19 @@
 @if (Model.Flow == "crear-cuenta") { <p class="account-muted">Empezá a organizar tu negocio con Aquarella.</p> }
 @if (Model.Legacy is not null) { <p class="account-muted">Vinculá tu cuenta a los datos de desarrollo existentes. Se conservará tu negocio.</p> }
 @if (Model.Message is not null) { <p class="account-status @(Model.Success ? "success" : "error")" role="status">@Model.Message</p> }
-@if (Model.Flow == "verificar-correo") {
+@if (Model.Flow == "crear-cuenta" && !Model.RegistrationEnabled) {
+    <a class="account-primary" href="/login">Volver a iniciar sesión</a>
+} else if (Model.Flow == "verificar-correo") {
+    @if (Model.VerificationReady) {
+        <p class="account-muted">Confirmá tu correo para habilitar la cuenta. Abrir este enlace no realiza cambios.</p>
+        <form method="post" class="account-form"><input type="hidden" asp-for="Token" /><button class="account-primary" type="submit">Verificar correo</button></form>
+    }
     <a class="account-primary" href="/login">@(Model.Success ? "Continuar a Aquarella" : "Volver a iniciar sesión")</a>
 } else if (Model.Flow == "nueva-contrasena" && Model.Success) {
     <a class="account-primary" href="/login">Iniciar sesión</a>
 } else {
     @if (Model.Flow == "verificar-email") {
-        @if (Model.EmailAvailable) { <p>Te enviamos un enlace para verificar tu cuenta.</p> }
+        @if (Model.EmailAvailable) { <p>Solicitud recibida. Si corresponde, se procesará el envío de un enlace para verificar tu cuenta. Si no llega, podés solicitarlo nuevamente.</p> }
         @if (registrationEmail is not null) { <p class="account-muted">@registrationEmail</p> }
     }
     @if (Model.Flow == "recuperar-contrasena") { <p class="account-muted">Ingresá tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.</p> }
@@ -44,6 +50,6 @@
             <small class="account-muted account-development-hint">Acceso de prueba</small>
         </form>
     }
-    @if (Model.Flow == "login") { <p class="account-footer">¿No tenés una cuenta? <a href="/crear-cuenta">Crear cuenta</a></p><p class="account-footer"><a href="/verificar-email">Reenviar verificación</a></p> }
+    @if (Model.Flow == "login") { @if (Model.RegistrationEnabled) { <p class="account-footer">¿No tenés una cuenta? <a href="/crear-cuenta">Crear cuenta</a></p> }<p class="account-footer"><a href="/verificar-email">Reenviar verificación</a></p> }
     else { <p class="account-footer">@(Model.Flow == "crear-cuenta" ? "¿Ya tenés una cuenta?" : "") <a href="/login">@(Model.Flow == "crear-cuenta" ? "Iniciar sesión" : "Volver a iniciar sesión")</a></p> }
 }

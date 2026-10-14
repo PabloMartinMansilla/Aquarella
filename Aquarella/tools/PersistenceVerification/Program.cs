@@ -46,7 +46,7 @@ if (phase == "seed")
     {
         await db.Database.MigrateAsync();
         Check(!db.Database.HasPendingModelChanges(), "Migration snapshot matches EF model");
-        Check((await db.Database.GetAppliedMigrationsAsync()).Count() == 4, "All four migrations build a fresh database");
+        Check((await db.Database.GetAppliedMigrationsAsync()).Count() == 5, "All five migrations build a fresh database");
     }
     foreach (var suffix in new[] { "A", "B" })
     {

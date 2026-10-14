@@ -160,6 +160,7 @@ async Task Start() {
     start.ArgumentList.Add(Path.Combine(publish, "Aquarella.dll"));
     foreach (var key in start.Environment.Keys.Where(k => k.StartsWith("ReverseProxy__", StringComparison.OrdinalIgnoreCase)).ToArray()) start.Environment.Remove(key);
     start.Environment["ASPNETCORE_ENVIRONMENT"] = start.Environment["DOTNET_ENVIRONMENT"] = "Production";
+    start.Environment["Email__Smtp__Enabled"] = "false";
     start.Environment.Remove("PORT"); start.Environment["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
     start.Environment["Accounts__PublicOrigin"] = "https://aquarella.example.test"; start.Environment["AllowedHosts"] = "aquarella.example.test";
     start.Environment["ProductionStorage__Root"] = root; start.Environment["DataProtection__KeysPath"] = Path.Combine(root, "keys");

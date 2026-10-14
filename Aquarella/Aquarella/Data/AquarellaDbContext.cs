@@ -4,6 +4,7 @@ public sealed class AquarellaDbContext(DbContextOptions<AquarellaDbContext> opti
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<AccountToken> AccountTokens => Set<AccountToken>();
+    public DbSet<AccountEmailNotification> AccountEmailNotifications => Set<AccountEmailNotification>();
     public DbSet<AccountLoginSession> AccountLoginSessions => Set<AccountLoginSession>();
     public DbSet<Business> Businesses => Set<Business>();
     public DbSet<Product> Products => Set<Product>();
@@ -18,6 +19,8 @@ public sealed class AquarellaDbContext(DbContextOptions<AquarellaDbContext> opti
         model.Entity<User>().Property(u => u.FirstName).HasMaxLength(100);
         model.Entity<User>().Property(u => u.LastName).HasMaxLength(100);
         model.Entity<AccountToken>().HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
+        model.Entity<AccountToken>().HasIndex(t => new { t.UserId, t.Purpose, t.CreatedAt });
+        model.Entity<AccountEmailNotification>().HasOne<User>().WithMany().HasForeignKey(n => n.UserId).OnDelete(DeleteBehavior.Cascade);
         model.Entity<AccountLoginSession>().HasOne<User>().WithMany().HasForeignKey(t => t.UserId).OnDelete(DeleteBehavior.Cascade);
         model.Entity<User>().Property(u => u.Username).HasMaxLength(120).IsRequired();
         model.Entity<Business>().HasOne(b => b.User).WithOne(u => u.Business).HasForeignKey<Business>(b => b.UserId).OnDelete(DeleteBehavior.Cascade);

@@ -42,6 +42,8 @@ namespace Aquarella.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("CreatedAt").HasColumnType("TEXT");
+
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("TEXT");
 
@@ -57,7 +59,7 @@ namespace Aquarella.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "Purpose", "CreatedAt");
 
                     b.ToTable("AccountTokens");
                 });
@@ -379,6 +381,27 @@ namespace Aquarella.Data.Migrations
             modelBuilder.Entity("Aquarella.Data.StockIntakeReceipt", b =>
                 {
                     b.HasOne("Aquarella.Data.Business", null).WithMany().HasForeignKey("BusinessId").OnDelete(DeleteBehavior.Cascade).IsRequired();
+                });
+            modelBuilder.Entity("Aquarella.Data.AccountEmailNotification", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
+                    b.Property<Guid>("UserId").HasColumnType("TEXT");
+                    b.Property<string>("Purpose").IsRequired().HasColumnType("TEXT");
+                    b.Property<Guid?>("TokenId").HasColumnType("TEXT");
+                    b.Property<string>("PublicOrigin").HasColumnType("TEXT");
+                    b.Property<DateTime>("CreatedAt").HasColumnType("TEXT");
+                    b.Property<DateTime?>("LastAttemptAt").HasColumnType("TEXT");
+                    b.Property<DateTime?>("LeaseUntil").HasColumnType("TEXT");
+                    b.Property<DateTime?>("SentAt").HasColumnType("TEXT");
+                    b.Property<DateTime?>("CancelledAt").HasColumnType("TEXT");
+                    b.Property<int>("Attempts").HasColumnType("INTEGER");
+                    b.HasKey("Id");
+                    b.HasIndex("UserId");
+                    b.ToTable("AccountEmailNotifications");
+                });
+            modelBuilder.Entity("Aquarella.Data.AccountEmailNotification", b =>
+                {
+                    b.HasOne("Aquarella.Data.User", null).WithMany().HasForeignKey("UserId").OnDelete(DeleteBehavior.Cascade).IsRequired();
                 });
 #pragma warning restore 612, 618
         }
